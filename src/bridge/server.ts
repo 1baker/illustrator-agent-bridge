@@ -7,12 +7,14 @@ import { detectIllustratorApps, probeIllustratorCommunication, type IllustratorP
 import { generatedJobSummary } from "./jsxGenerator.js";
 import { LaunchJobError, launchJsxJob, resolveLaunchPlatform, type LaunchPlatform } from "./launcher.js";
 import { driveIllustratorMouse, drivePhotoshopMouse, type IllustratorMouseAction, type IllustratorMouseButton } from "./mouseAutomation.js";
+import { detectPhotoshopDesktop } from "./photoshopProbe.js";
 import { JobResultError, normalizeJobId, readJobStatus } from "./results.js";
 import { normalizeCommand, normalizeScene, ValidationError } from "./validation.js";
 import { OpenAiPlannerError } from "../planner/openAiCartoonPlanner.js";
 import { ObjectShapePlannerError, parseObjectShapeTarget, planObjectShapeScene } from "../planner/objectShapePlanner.js";
 import type { PlannerMode } from "../planner/plannerRouter.js";
 import { planScientificConceptScene } from "../planner/scientificConceptPlanner.js";
+import { createAuraCallExternalArtworkReviewRunner, detectAuraCallChatGptBrowser } from "../qa/auracallExternalArtworkJudge.js";
 import { reviewArtworkQuality } from "../qa/artworkReviewGuard.js";
 import { ExportQaError, inspectExportArtifact } from "../qa/exportQa.js";
 import { guardObjectShapeScene } from "../qa/objectShapeGuard.js";
@@ -20,6 +22,7 @@ import { loadDefaultCorpus, searchCorpus } from "../semantic/search.js";
 import type { SemanticKind } from "../semantic/types.js";
 import { inspectVectorShapeFiles } from "../semantic/vectorShapeIngest.js";
 import { executeAdobeProjectWorkflow, prepareAdobeProjectWorkflow } from "../workflow/adobeProjectWorkflow.js";
+import { preflightAdobeProjectWorkflow } from "../workflow/adobeProjectPreflight.js";
 import { executeAdobeSvgProofWorkflow, prepareAdobeSvgProofWorkflow, type AdobeArtworkIntent, type AdobeSvgProofRunMode } from "../workflow/adobeSvgProofWorkflow.js";
 import { executeCartoonWorkflow } from "../workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow, type ObjectWorkflowRunMode } from "../workflow/objectExecutor.js";
@@ -86,6 +89,23 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
     const platform = optionalLaunchPlatform(url.searchParams.get("platform") ?? undefined);
     const candidates = await detectIllustratorApps(platform);
     writeJson(response, 200, { ok: true, platform: platform ?? "auto", candidates });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/v1/photoshop/detect") {
+    const platform = optionalLaunchPlatform(url.searchParams.get("platform") ?? undefined);
+    const crashLookbackMinutes = optionalNumberQueryValue(url.searchParams.get("crashLookbackMinutes") ?? undefined, "crashLookbackMinutes");
+    const timeoutMs = optionalNumberQueryValue(url.searchParams.get("timeoutMs") ?? undefined, "timeoutMs");
+    const result = await detectPhotoshopDesktop({ platform, crashLookbackMinutes, timeoutMs });
+    writeJson(response, 200, result);
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/v1/chatgpt/detect") {
+    const command = url.searchParams.get("auracallCommand") ?? undefined;
+    const timeoutSeconds = optionalNumberQueryValue(url.searchParams.get("timeoutSeconds") ?? undefined, "timeoutSeconds");
+    const result = await detectAuraCallChatGptBrowser({ command, timeoutSeconds, workdir: process.cwd() });
+    writeJson(response, 200, result);
     return;
   }
 
@@ -288,6 +308,7 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
     const result = await runJsxViaIllustratorCom(jobPath, {
       platform: resolveLaunchPlatform(optionalLaunchPlatform(body.platform)),
       dryRun: optionalBooleanBodyValue(body.dryRun, "dryRun"),
+      timeoutMs: optionalNumberBodyValue(body.timeoutMs, "timeoutMs"),
       root
     });
 
@@ -432,8 +453,47 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
     return;
   }
 
+  if (method === "GET" && url.pathname === "/v1/workflows/adobe-project/preflight") {
+    const externalReviewProvider = optionalExternalReviewProvider(url.searchParams.get("externalReviewProvider") ?? undefined);
+    const requireChatGptBrowser = optionalBooleanQueryValue(url.searchParams.get("requireChatGptBrowser") ?? undefined, "requireChatGptBrowser");
+    const result = await preflightAdobeProjectWorkflow({
+      illustratorPlatform: optionalLaunchPlatform(url.searchParams.get("platform") ?? undefined),
+      photoshopPlatform: optionalLaunchPlatform(url.searchParams.get("photoshopPlatform") ?? undefined),
+      photoshopCrashLookbackMinutes: optionalNumberQueryValue(
+        url.searchParams.get("photoshopCrashLookbackMinutes") ?? undefined,
+        "photoshopCrashLookbackMinutes"
+      ),
+      photoshopTimeoutMs: optionalNumberQueryValue(url.searchParams.get("photoshopTimeoutMs") ?? undefined, "photoshopTimeoutMs"),
+      requireChatGptBrowser: requireChatGptBrowser || externalReviewProvider === "auracall",
+      auracallCommand: url.searchParams.get("auracallCommand") ?? undefined,
+      chatGptTimeoutSeconds: optionalNumberQueryValue(url.searchParams.get("chatGptTimeoutSeconds") ?? undefined, "chatGptTimeoutSeconds"),
+      chatGptOperationTimeoutSeconds: optionalNumberQueryValue(
+        url.searchParams.get("chatGptOperationTimeoutSeconds") ?? undefined,
+        "chatGptOperationTimeoutSeconds"
+      )
+    });
+    writeJson(response, 200, result);
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/v1/workflows/adobe-project/execute") {
     const body = objectBody(await readJson(request));
+    const externalReviewProvider = optionalExternalReviewProvider(body.externalReviewProvider);
+    const externalReviewPacketPath = optionalStringBodyValue(body.externalReviewPacketPath, "externalReviewPacketPath");
+    const externalReviewPreflight = optionalBooleanBodyValue(body.externalReviewPreflight, "externalReviewPreflight");
+    const externalReview =
+      externalReviewProvider === "auracall"
+        ? createAuraCallExternalArtworkReviewRunner({
+            command: optionalStringBodyValue(body.auracallCommand, "auracallCommand"),
+            model: optionalStringBodyValue(body.externalReviewModel, "externalReviewModel"),
+            timeoutSeconds: optionalNumberBodyValue(body.externalReviewTimeoutSeconds, "externalReviewTimeoutSeconds"),
+            workdir: process.cwd(),
+            packetPath: externalReviewPacketPath,
+            outputPath: optionalStringBodyValue(body.externalReviewOutputPath, "externalReviewOutputPath"),
+            preflightBrowserReadiness: externalReviewPreflight ?? true,
+            preflightTimeoutSeconds: optionalNumberBodyValue(body.externalReviewPreflightTimeoutSeconds, "externalReviewPreflightTimeoutSeconds")
+          })
+        : undefined;
     const execution = await executeAdobeProjectWorkflow({
       prompt: stringBodyValue(body.prompt, "prompt"),
       outputPath: stringBodyValue(body.outputPath, "outputPath"),
@@ -477,6 +537,12 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
       proofMinHeight: optionalNumberBodyValue(body.proofMinHeight, "proofMinHeight"),
       proofMinNonBlankRatio: optionalNumberBodyValue(body.proofMinNonBlankRatio, "proofMinNonBlankRatio"),
       maxReviewIterations: optionalNumberBodyValue(body.maxReviewIterations, "maxReviewIterations"),
+      externalReview,
+      externalReviewPacketPath,
+      externalReviewVerdict: body.externalReviewVerdict,
+      requireExternalReviewPass: optionalBooleanBodyValue(body.requireExternalReviewPass, "requireExternalReviewPass") || externalReviewProvider === "auracall",
+      externalReviewMinScore: optionalNumberBodyValue(body.externalReviewMinScore, "externalReviewMinScore"),
+      reviewReportPath: optionalStringBodyValue(body.reviewReportPath, "reviewReportPath"),
       root
     });
     writeJson(response, 201, execution);
@@ -699,6 +765,35 @@ function optionalNumberBodyValue(input: unknown, name: string): number | undefin
   return input;
 }
 
+function optionalNumberQueryValue(input: string | undefined, name: string): number | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const value = Number(input);
+  if (!Number.isFinite(value)) {
+    throw new ValidationError(`${name} must be a finite number`);
+  }
+
+  return value;
+}
+
+function optionalBooleanQueryValue(input: string | undefined, name: string): boolean | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  if (input === "true") {
+    return true;
+  }
+
+  if (input === "false") {
+    return false;
+  }
+
+  throw new ValidationError(`${name} must be true or false`);
+}
+
 function optionalBooleanBodyValue(input: unknown, name: string): boolean | undefined {
   if (input === undefined) {
     return undefined;
@@ -709,6 +804,18 @@ function optionalBooleanBodyValue(input: unknown, name: string): boolean | undef
   }
 
   return input;
+}
+
+function optionalExternalReviewProvider(input: unknown): "manual" | "auracall" | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  if (input === "manual" || input === "auracall") {
+    return input;
+  }
+
+  throw new ValidationError("externalReviewProvider must be manual or auracall");
 }
 
 function optionalExportFormat(input: unknown): "pdf" | "svg" | "png" | "jpg" | undefined {

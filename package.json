@@ -17,7 +17,9 @@
     "jsx:cartoon": "node dist/src/cli.js jsx:cartoon examples/cartoon-scene.json",
     "jsx:export": "node dist/src/cli.js jsx:export",
     "photoshop:proof-svg": "node dist/src/cli.js photoshop:proof-svg",
+    "photoshop:detect": "node dist/src/cli.js photoshop:detect",
     "photoshop:mouse": "node dist/src/cli.js photoshop:mouse",
+    "chatgpt:detect": "node dist/src/cli.js chatgpt:detect",
     "illustrator:detect": "node dist/src/cli.js illustrator:detect",
     "illustrator:probe": "node dist/src/cli.js illustrator:probe",
     "illustrator:mouse": "node dist/src/cli.js illustrator:mouse",
@@ -32,11 +34,13 @@
     "workflow:adobe-svg-proof": "node dist/src/cli.js workflow:adobe-svg-proof",
     "workflow:execute-adobe-svg-proof": "node dist/src/cli.js workflow:execute-adobe-svg-proof",
     "workflow:adobe-project": "node dist/src/cli.js workflow:adobe-project",
+    "workflow:preflight-adobe-project": "node dist/src/cli.js workflow:preflight-adobe-project",
     "workflow:execute-adobe-project": "node dist/src/cli.js workflow:execute-adobe-project",
     "workflow:object": "node dist/src/cli.js workflow:object",
     "workflow:execute-object": "node dist/src/cli.js workflow:execute-object",
     "job:launch": "node dist/src/cli.js job:launch",
     "job:run-com": "node dist/src/cli.js job:run-com",
+    "job:run-photoshop-com": "node dist/src/cli.js job:run-photoshop-com",
     "semantic:search": "node dist/src/cli.js semantic:search"
   },
   "dependencies": {

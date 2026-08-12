@@ -292,6 +292,7 @@ async function executeAdobeSvgProofWorkflowAttempt(options: ExecuteAdobeSvgProof
   const photoshopLaunch = await runJsxViaPhotoshopCom(workflow.photoshopProofJob.jobPath, {
     platform: resolveLaunchPlatform(options.photoshopPlatform ?? options.launchPlatform),
     dryRun,
+    timeoutMs: options.timeoutMs,
     root: options.root
   });
   if (!photoshopLaunch.ok) {
@@ -486,6 +487,7 @@ async function runIllustratorWorkflowJob(
     return runJsxViaIllustratorCom(jobPath, {
       platform: resolveLaunchPlatform(options.launchPlatform),
       dryRun: options.dryRun,
+      timeoutMs: options.timeoutMs,
       root: options.root
     });
   }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -20,6 +20,9 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     assert.ok(listed.tools.some((tool) => tool.name === "semantic_search_visual_knowledge"));
     assert.ok(listed.tools.some((tool) => tool.name === "inspect_vector_shape_files"));
     assert.ok(listed.tools.some((tool) => tool.name === "detect_illustrator_desktop"));
+    assert.ok(listed.tools.some((tool) => tool.name === "detect_photoshop_desktop"));
+    assert.ok(listed.tools.some((tool) => tool.name === "detect_chatgpt_browser"));
+    assert.ok(listed.tools.some((tool) => tool.name === "preflight_adobe_project_workflow"));
     assert.ok(listed.tools.some((tool) => tool.name === "probe_illustrator_communication"));
     assert.ok(listed.tools.some((tool) => tool.name === "drive_illustrator_mouse"));
     assert.ok(listed.tools.some((tool) => tool.name === "drive_photoshop_mouse"));
@@ -81,6 +84,47 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     const probeBody = JSON.parse(probeContent[0]?.text ?? "");
     assert.equal(probeBody.ok, true);
     assert.equal(probeBody.launch.dryRun, true);
+
+    const photoshopDetectResult = await client.callTool({
+      name: "detect_photoshop_desktop",
+      arguments: {
+        platform: "linux"
+      }
+    });
+    const photoshopDetectContent = photoshopDetectResult.content as Array<{ type: string; text?: string }>;
+    const photoshopDetectBody = JSON.parse(photoshopDetectContent[0]?.text ?? "");
+    assert.equal(photoshopDetectBody.ok, false);
+    assert.equal(photoshopDetectBody.platform, "linux");
+    assert.match(photoshopDetectBody.next.join("\n"), /Windows or WSL/);
+
+    const chatGptDetectResult = await client.callTool({
+      name: "detect_chatgpt_browser",
+      arguments: {
+        auracallCommand: join(root, "missing-auracall"),
+        timeoutSeconds: 1
+      }
+    });
+    const chatGptDetectContent = chatGptDetectResult.content as Array<{ type: string; text?: string }>;
+    const chatGptDetectBody = JSON.parse(chatGptDetectContent[0]?.text ?? "");
+    assert.equal(chatGptDetectBody.ok, false);
+    assert.equal(chatGptDetectBody.state, "doctor-command-failed");
+    assert.deepEqual(chatGptDetectBody.command.args, ["doctor", "--target", "chatgpt", "--json", "--local-only", "--prune-browser-state"]);
+
+    const preflightResult = await client.callTool({
+      name: "preflight_adobe_project_workflow",
+      arguments: {
+        platform: "linux",
+        photoshopPlatform: "linux",
+        requireChatGptBrowser: false
+      }
+    });
+    const preflightContent = preflightResult.content as Array<{ type: string; text?: string }>;
+    const preflightBody = JSON.parse(preflightContent[0]?.text ?? "");
+    assert.equal(preflightBody.ok, false);
+    assert.equal(preflightBody.illustrator.ok, false);
+    assert.equal(preflightBody.illustrator.platform, "linux");
+    assert.equal(preflightBody.photoshop.ok, false);
+    assert.equal(preflightBody.chatGpt, undefined);
 
     const mouseResult = await client.callTool({
       name: "drive_illustrator_mouse",
@@ -273,6 +317,7 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     assert.equal(adobeProofBody.sceneLaunch.command.command, "powershell.exe");
     assert.equal(adobeProofBody.photoshopLaunch.command.command, "powershell.exe");
 
+    const adobeProjectReviewReportPath = join(root, "mcp-adobe-project.review.json");
     const adobeProjectResult = await client.callTool({
       name: "execute_adobe_project_workflow",
       arguments: {
@@ -285,13 +330,20 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
         illustratorRunMode: "com",
         dryRun: true,
         maxReviewIterations: 3,
-        visibleMouseProof: true
+        visibleMouseProof: true,
+        reviewReportPath: adobeProjectReviewReportPath
       }
     });
     const adobeProjectContent = adobeProjectResult.content as Array<{ type: string; text?: string }>;
     const adobeProjectBody = JSON.parse(adobeProjectContent[0]?.text ?? "");
     assert.equal(adobeProjectBody.ok, true);
     assert.equal(adobeProjectBody.dryRun, true);
+    assert.equal(adobeProjectBody.reviewReportPath, adobeProjectReviewReportPath);
+    assert.equal(adobeProjectBody.reviewReport.schemaVersion, "adobe-project-review-report.v1");
+    assert.equal(adobeProjectBody.reviewReport.accepted, false);
+    assert.equal(adobeProjectBody.reviewReport.goalAcceptance.accepted, false);
+    assert.equal(adobeProjectBody.reviewReport.goalAcceptance.chatGptBrowserReviewRequired, true);
+    assert.match(adobeProjectBody.reviewReport.goalAcceptance.missing.join("\n"), /ChatGPT browser external review/);
     assert.equal(adobeProjectBody.workflow.runbook.length, 12);
     assert.equal(adobeProjectBody.workflow.handoff.sequence.length, 7);
     assert.match(adobeProjectBody.workflow.photoshopHandoffSvgPath, /mcp-adobe-project\.photoshop-handoff\.svg$/);
@@ -302,6 +354,10 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     assert.equal(adobeProjectBody.illustratorReferenceLaunch.command.command, "powershell.exe");
     assert.equal(adobeProjectBody.visibleMouseProofs.illustratorScene.action, "dry-run");
     assert.equal(adobeProjectBody.visibleMouseProofs.photoshopEdit.target, "photoshop");
+    const adobeProjectReviewReport = JSON.parse(await readFile(adobeProjectReviewReportPath, "utf8"));
+    assert.equal(adobeProjectReviewReport.schemaVersion, "adobe-project-review-report.v1");
+    assert.equal(adobeProjectReviewReport.dryRun, true);
+    assert.equal(adobeProjectReviewReport.goalAcceptance.accepted, false);
 
     const objectWorkflowResult = await client.callTool({
       name: "prepare_object_shape_workflow",

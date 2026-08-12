@@ -85,6 +85,7 @@ export async function probeIllustratorCommunication(options: IllustratorProbeOpt
       ? await runJsxViaIllustratorCom(job.jobPath, {
           platform,
           dryRun: options.dryRun,
+          timeoutMs: options.timeoutMs,
           root: options.root
         })
       : await launchJsxJob(job.jobPath, {

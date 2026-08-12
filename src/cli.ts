@@ -11,6 +11,7 @@ import { driveIllustratorMouse, drivePhotoshopMouse, type IllustratorMouseAction
 import { runJsxViaPhotoshopCom } from "./bridge/photoshopComAutomation.js";
 import { createGeneratedPhotoshopJob } from "./bridge/photoshopJobs.js";
 import { generatedPhotoshopJobSummary } from "./bridge/photoshopJsxGenerator.js";
+import { detectPhotoshopDesktop } from "./bridge/photoshopProbe.js";
 import { JobResultError, normalizeJobId, readJobStatus, waitForJobResult } from "./bridge/results.js";
 import { startBridgeServer } from "./bridge/server.js";
 import { normalizeCommand, normalizeScene, ValidationError } from "./bridge/validation.js";
@@ -21,6 +22,7 @@ import { planCartoonSceneWithMode, type PlannerMode } from "./planner/plannerRou
 import { ExportQaError, inspectExportArtifact } from "./qa/exportQa.js";
 import { reviewArtworkQuality } from "./qa/artworkReviewGuard.js";
 import { guardObjectShapeScene } from "./qa/objectShapeGuard.js";
+import { createAuraCallExternalArtworkReviewRunner, detectAuraCallChatGptBrowser } from "./qa/auracallExternalArtworkJudge.js";
 import { loadDefaultCorpus, searchCorpus } from "./semantic/search.js";
 import {
   executeAdobeSvgProofWorkflow,
@@ -29,6 +31,7 @@ import {
   type AdobeSvgProofRunMode
 } from "./workflow/adobeSvgProofWorkflow.js";
 import { executeAdobeProjectWorkflow, prepareAdobeProjectWorkflow } from "./workflow/adobeProjectWorkflow.js";
+import { preflightAdobeProjectWorkflow } from "./workflow/adobeProjectPreflight.js";
 import { executeCartoonWorkflow } from "./workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow, type ObjectWorkflowRunMode } from "./workflow/objectExecutor.js";
 import { prepareCartoonWorkflow } from "./workflow/cartoonWorkflow.js";
@@ -61,6 +64,12 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "photoshop:proof-svg":
       await makePhotoshopSvgProof(rest);
+      return;
+    case "photoshop:detect":
+      await photoshopDetect(rest);
+      return;
+    case "chatgpt:detect":
+      await chatGptDetect(rest);
       return;
     case "illustrator:detect":
       await illustratorDetect(rest);
@@ -100,6 +109,9 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "workflow:adobe-project":
       await workflowAdobeProject(rest);
+      return;
+    case "workflow:preflight-adobe-project":
+      await workflowPreflightAdobeProject(rest);
       return;
     case "workflow:execute-adobe-project":
       await workflowExecuteAdobeProject(rest);
@@ -252,6 +264,29 @@ async function illustratorDetect(args: string[]): Promise<void> {
   const platform = optionalLaunchPlatform(optionValue(options, "platform"));
   const candidates = await detectIllustratorApps(platform);
   console.log(JSON.stringify({ ok: true, platform: platform ?? "auto", candidates }, null, 2));
+}
+
+async function photoshopDetect(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const result = await detectPhotoshopDesktop({
+    platform: optionalLaunchPlatform(optionValue(options, "platform")),
+    crashLookbackMinutes: optionValue(options, "crash-lookback-minutes") ? Number(optionValue(options, "crash-lookback-minutes")) : undefined,
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined
+  });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function chatGptDetect(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const result = await detectAuraCallChatGptBrowser({
+    command: optionValue(options, "auracall-command"),
+    timeoutSeconds: optionValue(options, "timeout-seconds") ? Number(optionValue(options, "timeout-seconds")) : undefined,
+    operationTimeoutSeconds: optionValue(options, "operation-timeout-seconds") ? Number(optionValue(options, "operation-timeout-seconds")) : undefined,
+    localOnly: !flagValue(options, "live"),
+    pruneBrowserState: !flagValue(options, "no-prune"),
+    workdir: process.cwd()
+  });
+  console.log(JSON.stringify(result, null, 2));
 }
 
 async function illustratorProbe(args: string[]): Promise<void> {
@@ -475,7 +510,8 @@ async function jobRunCom(args: string[]): Promise<void> {
   const result = await runJsxViaIllustratorCom(jobPath, {
     platform,
     dryRun: flagValue(options, "dry-run"),
-    root: optionValue(options, "root")
+    root: optionValue(options, "root"),
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined
   });
   console.log(JSON.stringify(result, null, 2));
 }
@@ -493,7 +529,8 @@ async function jobRunPhotoshopCom(args: string[]): Promise<void> {
   const result = await runJsxViaPhotoshopCom(jobPath, {
     platform,
     dryRun: flagValue(options, "dry-run"),
-    root: optionValue(options, "root")
+    root: optionValue(options, "root"),
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined
   });
   console.log(JSON.stringify(result, null, 2));
 }
@@ -846,11 +883,53 @@ async function workflowAdobeProject(args: string[]): Promise<void> {
   console.log(JSON.stringify(workflow, null, 2));
 }
 
+async function workflowPreflightAdobeProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const externalReviewProvider = optionalExternalReviewProvider(optionValue(options, "external-review-provider"));
+  const result = await preflightAdobeProjectWorkflow({
+    illustratorPlatform: optionalLaunchPlatform(optionValue(options, "platform")),
+    photoshopPlatform: optionalLaunchPlatform(optionValue(options, "photoshop-platform")),
+    photoshopCrashLookbackMinutes: optionValue(options, "photoshop-crash-lookback-minutes")
+      ? Number(optionValue(options, "photoshop-crash-lookback-minutes"))
+      : undefined,
+    photoshopTimeoutMs: optionValue(options, "photoshop-timeout-ms") ? Number(optionValue(options, "photoshop-timeout-ms")) : undefined,
+    requireChatGptBrowser: flagValue(options, "require-chatgpt-browser") || externalReviewProvider === "auracall",
+    auracallCommand: optionValue(options, "auracall-command"),
+    chatGptTimeoutSeconds: optionValue(options, "chatgpt-timeout-seconds") ? Number(optionValue(options, "chatgpt-timeout-seconds")) : undefined,
+    chatGptOperationTimeoutSeconds: optionValue(options, "chatgpt-operation-timeout-seconds")
+      ? Number(optionValue(options, "chatgpt-operation-timeout-seconds"))
+      : undefined
+  });
+  console.log(JSON.stringify(result, null, 2));
+}
+
 async function workflowExecuteAdobeProject(args: string[]): Promise<void> {
   const options = parseOptions(args);
   const prompt = options.positionals.join(" ");
   const outputPath = optionValue(options, "output");
   const dryRun = flagValue(options, "dry-run");
+  const externalReviewVerdictPath = optionValue(options, "external-review-verdict");
+  const externalReviewPacketPath = optionValue(options, "external-review-packet");
+  const reviewReportPath = optionValue(options, "review-report");
+  const externalReviewVerdict = externalReviewVerdictPath ? await readJsonFile(externalReviewVerdictPath) : undefined;
+  const externalReviewProvider = optionalExternalReviewProvider(optionValue(options, "external-review-provider"));
+  const externalReview =
+    externalReviewProvider === "auracall"
+      ? createAuraCallExternalArtworkReviewRunner({
+          command: optionValue(options, "auracall-command"),
+          model: optionValue(options, "external-review-model"),
+          timeoutSeconds: optionValue(options, "external-review-timeout-seconds")
+            ? Number(optionValue(options, "external-review-timeout-seconds"))
+            : undefined,
+          workdir: process.cwd(),
+          packetPath: externalReviewPacketPath,
+          outputPath: optionValue(options, "external-review-output"),
+          preflightBrowserReadiness: !flagValue(options, "no-external-review-preflight"),
+          preflightTimeoutSeconds: optionValue(options, "external-review-preflight-timeout-seconds")
+            ? Number(optionValue(options, "external-review-preflight-timeout-seconds"))
+            : undefined
+        })
+      : undefined;
 
   if (!prompt) {
     throw new ValidationError("workflow:execute-adobe-project requires a prompt");
@@ -904,7 +983,13 @@ async function workflowExecuteAdobeProject(args: string[]): Promise<void> {
     proofMinWidth: optionValue(options, "proof-min-width") ? Number(optionValue(options, "proof-min-width")) : undefined,
     proofMinHeight: optionValue(options, "proof-min-height") ? Number(optionValue(options, "proof-min-height")) : undefined,
     proofMinNonBlankRatio: optionValue(options, "proof-min-nonblank-ratio") ? Number(optionValue(options, "proof-min-nonblank-ratio")) : undefined,
-    maxReviewIterations: optionValue(options, "max-review-iterations") ? Number(optionValue(options, "max-review-iterations")) : undefined
+    maxReviewIterations: optionValue(options, "max-review-iterations") ? Number(optionValue(options, "max-review-iterations")) : undefined,
+    externalReview,
+    externalReviewPacketPath,
+    externalReviewVerdict,
+    requireExternalReviewPass: flagValue(options, "require-external-review") || externalReviewProvider === "auracall",
+    externalReviewMinScore: optionValue(options, "external-review-min-score") ? Number(optionValue(options, "external-review-min-score")) : undefined,
+    reviewReportPath
   });
 
   console.log(JSON.stringify(execution, null, 2));
@@ -999,7 +1084,10 @@ const flagOptions = new Set([
   "draw-complex",
   "mouse-proof",
   "visible-mouse-proof",
-  "embed-reference"
+  "embed-reference",
+  "require-external-review",
+  "require-chatgpt-browser",
+  "no-external-review-preflight"
 ]);
 
 function parseOptions(args: string[]): ParsedOptions {
@@ -1108,6 +1196,8 @@ Commands:
   jsx:ping [--message TEXT] [--root DIR]
   jsx:cartoon [SCENE_JSON_PATH] [--root DIR]
   jsx:export --output PATH [--format pdf|svg|png|jpg] [--root DIR]
+  photoshop:detect [--platform auto|windows|wsl] [--crash-lookback-minutes N] [--timeout-ms N]
+  chatgpt:detect [--auracall-command PATH] [--timeout-seconds N] [--operation-timeout-seconds N] [--live] [--no-prune]
   photoshop:proof-svg SVG_PATH --output PNG_PATH [--width N] [--height N] [--resolution N] [--root DIR]
   illustrator:detect [--platform auto|macos|windows|wsl|linux]
   illustrator:probe [--platform auto|macos|windows|wsl|linux] [--method auto|desktop|com] [--app PATH_OR_NAME] [--dry-run] [--wait] [--auto-confirm-dialog] [--draw-circle] [--draw-complex] [--mouse-proof] [--mouse-action move|click|double-click|drag] [--timeout-ms N] [--dialog-timeout-ms N] [--root DIR]
@@ -1122,14 +1212,15 @@ Commands:
   workflow:adobe-svg-proof PROMPT --output SVG_PATH [--proof-output PNG_PATH] [--intent auto|cartoon|scientific|object] [--planner deterministic|auto|openai] [--proof-width N] [--proof-height N] [--proof-resolution N] [--root DIR] [--corpus PATH]
   workflow:execute-adobe-svg-proof PROMPT --output SVG_PATH [--proof-output PNG_PATH] [--intent auto|cartoon|scientific|object] [--illustrator-run-mode launch|com] [--max-review-iterations N] [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--root DIR] [--corpus PATH]
   workflow:adobe-project PROMPT --output SVG_PATH [--source-svg SVG_PATH] [--photoshop-reference PNG_PATH] [--photoshop-handoff-svg SVG_PATH] [--photoshop-working-psd PSD_PATH] [--photoshop-feedback JSON_PATH] [--intent auto|cartoon|scientific|object] [--reference-opacity N] [--embed-reference] [--visible-mouse-proof] [--root DIR] [--corpus PATH]
-  workflow:execute-adobe-project PROMPT --output SVG_PATH [--source-svg SVG_PATH] [--photoshop-reference PNG_PATH] [--photoshop-handoff-svg SVG_PATH] [--photoshop-working-psd PSD_PATH] [--photoshop-feedback JSON_PATH] [--intent auto|cartoon|scientific|object] [--illustrator-run-mode launch|com] [--max-review-iterations N] [--reference-opacity N] [--embed-reference] [--visible-mouse-proof] [--visible-mouse-duration-ms N] [--illustrator-mouse-tool TEXT] [--photoshop-mouse-tool TEXT] [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--root DIR] [--corpus PATH]
+  workflow:preflight-adobe-project [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--photoshop-crash-lookback-minutes N] [--photoshop-timeout-ms N] [--require-chatgpt-browser] [--external-review-provider manual|auracall] [--chatgpt-timeout-seconds N] [--chatgpt-operation-timeout-seconds N] [--auracall-command PATH]
+  workflow:execute-adobe-project PROMPT --output SVG_PATH [--source-svg SVG_PATH] [--photoshop-reference PNG_PATH] [--photoshop-handoff-svg SVG_PATH] [--photoshop-working-psd PSD_PATH] [--photoshop-feedback JSON_PATH] [--intent auto|cartoon|scientific|object] [--illustrator-run-mode launch|com] [--max-review-iterations N] [--reference-opacity N] [--embed-reference] [--visible-mouse-proof] [--visible-mouse-duration-ms N] [--illustrator-mouse-tool TEXT] [--photoshop-mouse-tool TEXT] [--external-review-provider manual|auracall] [--external-review-packet JSON_PATH] [--external-review-output TXT_PATH] [--external-review-verdict JSON_PATH] [--review-report JSON_PATH] [--require-external-review] [--external-review-min-score N] [--external-review-model MODEL] [--external-review-timeout-seconds N] [--external-review-preflight-timeout-seconds N] [--no-external-review-preflight] [--auracall-command PATH] [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--root DIR] [--corpus PATH]
   workflow:object PROMPT --output PATH [--format pdf|svg|png|jpg] [--max-guard-iterations N] [--root DIR] [--corpus PATH]
   workflow:execute-object PROMPT --output PATH [--format pdf|svg|png|jpg] [--run-mode launch|com] [--max-guard-iterations N] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--platform auto|macos|windows|wsl|linux] [--app PATH_OR_NAME] [--root DIR] [--corpus PATH] [--min-nonblank-ratio N]
   job:status JOB_ID [--root DIR]
   job:wait JOB_ID [--timeout-ms N] [--interval-ms N] [--root DIR]
   job:launch JOB_ID [--platform auto|macos|windows|wsl|linux] [--app PATH_OR_NAME] [--dry-run] [--root DIR]
-  job:run-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--root DIR]
-  job:run-photoshop-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--root DIR]
+  job:run-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--timeout-ms N] [--root DIR]
+  job:run-photoshop-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--timeout-ms N] [--root DIR]
   qa:export PATH [--format pdf|svg|png|jpg] [--min-bytes N] [--min-width N] [--min-height N] [--min-nonblank-ratio N]
   qa:artwork PATH [--scene SCENE_OR_PLAN_JSON] [--prompt TEXT] [--target TEXT] [--format pdf|svg|png|jpg] [--min-bytes N] [--min-width N] [--min-height N] [--min-nonblank-ratio N]
   serve [--host 127.0.0.1] [--port 4317] [--root DIR]
@@ -1234,6 +1325,19 @@ function optionalAdobeSvgProofRunMode(input: string | undefined): AdobeSvgProofR
   const value = input.toLowerCase();
   if (value !== "launch" && value !== "com") {
     throw new ValidationError("illustrator-run-mode must be launch or com");
+  }
+
+  return value;
+}
+
+function optionalExternalReviewProvider(input: string | undefined): "manual" | "auracall" | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const value = input.toLowerCase();
+  if (value !== "manual" && value !== "auracall") {
+    throw new ValidationError("external-review-provider must be manual or auracall");
   }
 
   return value;

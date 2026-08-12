@@ -1,5 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { extname, isAbsolute, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { runJsxViaIllustratorCom } from "../bridge/comAutomation.js";
 import { createGeneratedJob } from "../bridge/jobs.js";
 import { generatedJobSummary } from "../bridge/jsxGenerator.js";
@@ -11,6 +13,17 @@ import { generatedPhotoshopJobSummary } from "../bridge/photoshopJsxGenerator.js
 import { waitForJobResult, type JobStatus } from "../bridge/results.js";
 import type { GeneratedJob } from "../bridge/types.js";
 import type { ObjectShapePlan } from "../planner/objectShapePlanner.js";
+import {
+  assessExternalArtworkJudgeVerdict,
+  makeExternalArtworkReviewPacket,
+  normalizeExternalArtworkJudgeVerdict,
+  type ExternalArtworkJudgeAssessment,
+  type ExternalArtworkJudgeVerdict,
+  type ExternalArtworkArtifactEvidenceItem,
+  type ExternalArtworkReviewArtifactEvidence,
+  type ExternalArtworkReviewHistoryItem,
+  type ExternalArtworkReviewPacket
+} from "../qa/externalArtworkJudge.js";
 import { reviewArtworkQuality, type ArtworkReviewReport } from "../qa/artworkReviewGuard.js";
 import { inspectExportArtifact, type ExportQaReport } from "../qa/exportQa.js";
 import { loadDefaultCorpus } from "../semantic/search.js";
@@ -101,6 +114,13 @@ export interface ExecuteAdobeProjectWorkflowOptions extends PrepareAdobeProjectW
   photoshopMouseToolShortcut?: string;
   illustratorMouseWindowTitlePattern?: string;
   photoshopMouseWindowTitlePattern?: string;
+  externalReview?: AdobeProjectExternalReviewRunner;
+  externalReviewVerdict?: ExternalArtworkJudgeVerdict | unknown;
+  externalReviewVerdicts?: Array<ExternalArtworkJudgeVerdict | unknown>;
+  externalReviewPacketPath?: string;
+  requireExternalReviewPass?: boolean;
+  externalReviewMinScore?: number;
+  reviewReportPath?: string;
 }
 
 export interface AdobeProjectReviewIteration {
@@ -114,14 +134,157 @@ export interface AdobeProjectReviewIteration {
   photoshopHandoffQaOk?: boolean;
   finalExportQaOk?: boolean;
   artworkReviewOk?: boolean;
+  artworkReviewIssues?: string[];
+  artworkReviewImprovements?: string[];
+  externalReviewOk?: boolean;
+  externalReviewScore?: number;
+  externalReviewSummary?: string;
+  externalReviewIssues?: string[];
+  externalReviewBlockingFindings?: ExternalArtworkJudgeVerdict["blocking_findings"];
   visibleMouseOk?: boolean;
   nextGoalPrompt: string | null;
+  feedbackFingerprint?: string;
+  repeatedFeedback?: boolean;
+  repeatedWithAttempt?: number;
+}
+
+export type AdobeProjectReviewLoopStatus =
+  | "accepted"
+  | "dry-run"
+  | "needs-revision"
+  | "pending-external-review"
+  | "blocked-external-readiness"
+  | "stalled";
+
+export type AdobeProjectReviewLoopStopReason =
+  | "passed"
+  | "dry-run"
+  | "iteration-limit"
+  | "repeated-feedback"
+  | "external-review-pending"
+  | "external-review-preflight"
+  | "failed-without-actionable-prompt";
+
+export interface AdobeProjectReviewLoopSummary {
+  status: AdobeProjectReviewLoopStatus;
+  stopReason: AdobeProjectReviewLoopStopReason;
+  iterations: number;
+  maxIterations: number;
+  finalNextGoalPrompt: string | null;
+  repeatedFeedback?: {
+    fingerprint: string;
+    attempts: number[];
+    nextGoalPrompt: string;
+  };
 }
 
 export interface AdobeProjectVisibleMouseProofs {
   illustratorScene?: DriveAdobeMouseResult;
   photoshopEdit?: DriveAdobeMouseResult;
   illustratorReturn?: DriveAdobeMouseResult;
+}
+
+export type AdobeProjectExternalReviewRunner = ((
+  packet: ExternalArtworkReviewPacket
+) => Promise<ExternalArtworkJudgeVerdict | AdobeProjectExternalReviewRunnerResult | unknown | null | undefined>) & {
+  preflight?: () => Promise<unknown>;
+};
+
+export interface AdobeProjectExternalReviewRunnerResult {
+  verdict: ExternalArtworkJudgeVerdict | unknown;
+  provider?: string;
+  command?: unknown;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  responseText?: string;
+  readiness?: unknown;
+}
+
+export interface AdobeProjectExternalReviewProviderEvidence {
+  provider?: string;
+  command?: unknown;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  responseText?: string;
+  readiness?: unknown;
+}
+
+export interface AdobeProjectExternalReviewReport {
+  requested: boolean;
+  ok: boolean;
+  packet: ExternalArtworkReviewPacket;
+  packetPath?: string;
+  verdict?: ExternalArtworkJudgeVerdict;
+  assessment?: ExternalArtworkJudgeAssessment;
+  source?: "callback" | "provided" | "preflight";
+  providerEvidence?: AdobeProjectExternalReviewProviderEvidence;
+  error?: string;
+  nextGoalPrompt: string | null;
+  issues: string[];
+}
+
+export interface AdobeProjectGoalAcceptance {
+  accepted: boolean;
+  localAccepted: boolean;
+  chatGptBrowserReviewRequired: true;
+  missing: string[];
+}
+
+export interface AdobeProjectReviewReport {
+  schemaVersion: "adobe-project-review-report.v1";
+  generatedAt: string;
+  ok: boolean;
+  dryRun: boolean;
+  accepted: boolean;
+  goalAcceptance: AdobeProjectGoalAcceptance;
+  prompt: string;
+  finalPrompt: string;
+  finalSvgPath: string;
+  artifacts: {
+    sourceSvgPath: string;
+    photoshopReferencePngPath: string;
+    photoshopHandoffSvgPath: string;
+    photoshopWorkingPsdPath: string;
+    photoshopFeedbackPath: string;
+  };
+  requirements: {
+    illustratorPhotoshopRoundTrip: {
+      ok: boolean;
+      sourceExportQaOk?: boolean;
+      photoshopReferenceQaOk?: boolean;
+      photoshopHandoffQaOk?: boolean;
+      finalExportQaOk?: boolean;
+      visibleMouseOk?: boolean;
+    };
+    codexLocalReview: {
+      ok: boolean;
+      score?: number;
+      issues: string[];
+      improvements: string[];
+      nextGoalPrompt: string | null;
+    };
+    chatGptBrowserReview: {
+      requested: boolean;
+      ok: boolean;
+      passed: boolean;
+      source?: "callback" | "provided" | "preflight";
+      score?: number;
+      packetPath?: string;
+      state?: string;
+      requiresHuman?: boolean;
+      summary?: string;
+      recommendedAction?: string;
+      reasons: string[];
+      error?: string;
+      issues: string[];
+      nextGoalPrompt: string | null;
+    };
+  };
+  reviewLoop: AdobeProjectReviewLoopSummary;
+  iterations: AdobeProjectReviewIteration[];
+  next: string[];
 }
 
 export interface AdobeProjectWorkflowExecution {
@@ -149,7 +312,12 @@ export interface AdobeProjectWorkflowExecution {
   finalExportQa?: ExportQaReport;
   visibleMouseProofs?: AdobeProjectVisibleMouseProofs;
   artworkReview?: ArtworkReviewReport;
+  externalReview?: AdobeProjectExternalReviewReport;
+  reviewLoop?: AdobeProjectReviewLoopSummary;
+  goalAcceptance?: AdobeProjectGoalAcceptance;
   reviewIterations: AdobeProjectReviewIteration[];
+  reviewReport?: AdobeProjectReviewReport;
+  reviewReportPath?: string;
   next: string[];
 }
 
@@ -297,14 +465,30 @@ export async function executeAdobeProjectWorkflow(options: ExecuteAdobeProjectWo
   const reviewIterations: AdobeProjectReviewIteration[] = [];
   let currentPrompt = options.prompt;
   let finalExecution: AdobeProjectWorkflowExecution | undefined;
+  let stopReason: AdobeProjectReviewLoopStopReason | undefined;
 
   for (let attempt = 1; attempt <= maxReviewIterations; attempt += 1) {
-    const execution = await executeAdobeProjectWorkflowAttempt({ ...options, prompt: currentPrompt });
-    const nextGoalPrompt = execution.artworkReview?.nextGoalPrompt ?? null;
-    reviewIterations.push(reviewIteration(attempt, currentPrompt, execution, nextGoalPrompt));
+    const execution = await executeAdobeProjectWorkflowAttempt(
+      { ...options, prompt: currentPrompt },
+      attempt,
+      maxReviewIterations,
+      reviewIterations
+    );
+    const nextGoalPrompt = nextGoalPromptForIteration(execution);
+    const iteration = reviewIteration(attempt, currentPrompt, execution, nextGoalPrompt);
+    reviewIterations.push(iteration);
     finalExecution = execution;
 
     if (!shouldRunReviewIteration(execution, nextGoalPrompt, attempt, maxReviewIterations)) {
+      stopReason = inferReviewLoopStopReason(execution, nextGoalPrompt, attempt, maxReviewIterations);
+      break;
+    }
+
+    const repeatedFeedback = findRepeatedFeedback(reviewIterations);
+    if (repeatedFeedback) {
+      iteration.repeatedFeedback = true;
+      iteration.repeatedWithAttempt = repeatedFeedback.previousAttempt;
+      stopReason = "repeated-feedback";
       break;
     }
 
@@ -315,14 +499,40 @@ export async function executeAdobeProjectWorkflow(options: ExecuteAdobeProjectWo
     throw new Error("Adobe project workflow did not execute any review iteration.");
   }
 
-  return {
-    ...finalExecution,
+  const reviewLoop = makeAdobeProjectReviewLoopSummary(
+    finalExecution,
     reviewIterations,
-    next: finalNextSteps(finalExecution.next, reviewIterations)
+    maxReviewIterations,
+    stopReason ?? inferReviewLoopStopReason(finalExecution, nextGoalPromptForIteration(finalExecution), reviewIterations.length, maxReviewIterations)
+  );
+  const next = finalNextSteps(finalExecution.next, reviewIterations, reviewLoop);
+  const executionWithoutGoalAcceptance: AdobeProjectWorkflowExecution = {
+    ...finalExecution,
+    reviewLoop,
+    reviewIterations,
+    next
+  };
+  const goalAcceptance = makeGoalAcceptanceForExecution(executionWithoutGoalAcceptance);
+  const execution: AdobeProjectWorkflowExecution = {
+    ...executionWithoutGoalAcceptance,
+    goalAcceptance
+  };
+  const reviewReport = makeAdobeProjectReviewReport(execution, options.prompt);
+  const reviewReportPath = options.reviewReportPath ? await writeAdobeProjectReviewReport(options.reviewReportPath, reviewReport) : undefined;
+
+  return {
+    ...execution,
+    reviewReport: reviewReportPath ? reviewReport : undefined,
+    reviewReportPath
   };
 }
 
-async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWorkflowOptions): Promise<AdobeProjectWorkflowExecution> {
+async function executeAdobeProjectWorkflowAttempt(
+  options: ExecuteAdobeProjectWorkflowOptions,
+  attempt: number,
+  maxReviewIterations: number,
+  previousReviewIterations: AdobeProjectReviewIteration[] = []
+): Promise<AdobeProjectWorkflowExecution> {
   const dryRun = options.dryRun ?? false;
   const illustratorRunMode = options.illustratorRunMode ?? "launch";
   const waitForResults = !dryRun && (options.waitForResults ?? true);
@@ -339,6 +549,20 @@ async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWo
       reviewIterations: [],
       next: [workflow.plan.guard.nextGoalPrompt ?? "Revise the object scene until the shape guard passes before launching Illustrator."]
     };
+  }
+
+  const externalReviewPreflight = await maybeRunExternalReviewPreflight(
+    options,
+    workflow,
+    attempt,
+    maxReviewIterations,
+    previousReviewIterations
+  );
+  if (externalReviewPreflight) {
+    return failure(
+      { dryRun, illustratorRunMode, workflow, externalReview: externalReviewPreflight },
+      "Resolve external ChatGPT browser review readiness before launching Illustrator or Photoshop for a required reviewed final SVG."
+    );
   }
 
   const sceneLaunch = await runIllustratorWorkflowJob(workflow.sceneJob.jobPath, illustratorRunMode, options);
@@ -403,6 +627,7 @@ async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWo
   const photoshopProjectLaunch = await runJsxViaPhotoshopCom(workflow.photoshopProjectJob.jobPath, {
     platform: resolveLaunchPlatform(options.photoshopPlatform ?? options.launchPlatform),
     dryRun,
+    timeoutMs: options.timeoutMs,
     root: options.root
   });
   if (!photoshopProjectLaunch.ok) {
@@ -492,6 +717,7 @@ async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWo
     photoshopCommitLaunch = await runJsxViaPhotoshopCom(workflow.photoshopCommitJob.jobPath, {
       platform: resolveLaunchPlatform(options.photoshopPlatform ?? options.launchPlatform),
       dryRun,
+      timeoutMs: options.timeoutMs,
       root: options.root
     });
     if (!photoshopCommitLaunch.ok) {
@@ -759,27 +985,48 @@ async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWo
         })
       : undefined;
   const artworkReviewClean = artworkReview ? artworkReview.ok && !shouldReviseArtworkFromReview(artworkReview) : true;
+  const baseOk =
+    sceneLaunch.ok &&
+    sourceExportLaunch.ok &&
+    photoshopProjectLaunch.ok &&
+    (photoshopCommitLaunch?.ok ?? true) &&
+    illustratorReferenceLaunch.ok &&
+    finalExportLaunch.ok &&
+    (sceneResult?.result?.ok ?? true) &&
+    (sourceExportResult?.result?.ok ?? true) &&
+    (photoshopProjectResult?.result?.ok ?? true) &&
+    (photoshopCommitResult?.result?.ok ?? true) &&
+    (illustratorReferenceResult?.result?.ok ?? true) &&
+    (finalExportResult?.result?.ok ?? true) &&
+    (sourceExportQa?.ok ?? true) &&
+    (photoshopReferenceQa?.ok ?? true) &&
+    (photoshopHandoffQa?.ok ?? true) &&
+    (finalExportQa?.ok ?? true) &&
+    visibleMouseProofsOk(visibleMouseProofs, Boolean(options.visibleMouseProof)) &&
+    artworkReviewClean;
+  const externalReview = await maybeRunExternalReview(
+    options,
+    workflow,
+    attempt,
+    maxReviewIterations,
+    {
+      workflowOk: baseOk,
+      sourceExportQaOk: sourceExportQa?.ok,
+      photoshopReferenceQaOk: photoshopReferenceQa?.ok,
+      photoshopHandoffQaOk: photoshopHandoffQa?.ok,
+      finalExportQaOk: finalExportQa?.ok,
+      artworkReviewOk: artworkReview?.ok,
+      artworkReviewScore: artworkReview?.score,
+      localIssues: artworkReview?.issues,
+      localNextGoalPrompt: artworkReview?.nextGoalPrompt ?? null
+    },
+    previousReviewIterations
+  );
+  const externalReviewClean =
+    externalReview ? externalReview.ok || (!externalReview.verdict && !externalReview.error && !options.requireExternalReviewPass) : true;
 
   return {
-    ok:
-      sceneLaunch.ok &&
-      sourceExportLaunch.ok &&
-      photoshopProjectLaunch.ok &&
-      (photoshopCommitLaunch?.ok ?? true) &&
-      illustratorReferenceLaunch.ok &&
-      finalExportLaunch.ok &&
-      (sceneResult?.result?.ok ?? true) &&
-      (sourceExportResult?.result?.ok ?? true) &&
-      (photoshopProjectResult?.result?.ok ?? true) &&
-      (photoshopCommitResult?.result?.ok ?? true) &&
-      (illustratorReferenceResult?.result?.ok ?? true) &&
-      (finalExportResult?.result?.ok ?? true) &&
-      (sourceExportQa?.ok ?? true) &&
-      (photoshopReferenceQa?.ok ?? true) &&
-      (photoshopHandoffQa?.ok ?? true) &&
-      (finalExportQa?.ok ?? true) &&
-      visibleMouseProofsOk(visibleMouseProofs, Boolean(options.visibleMouseProof)) &&
-      artworkReviewClean,
+    ok: baseOk && externalReviewClean,
     dryRun,
     illustratorRunMode,
     photoshopRunMode: "com",
@@ -803,6 +1050,7 @@ async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWo
     finalExportQa,
     visibleMouseProofs,
     artworkReview,
+    externalReview,
     reviewIterations: [],
     next: nextSteps(dryRun, waitForResults, Boolean(options.skipQa), {
       sceneLaunch,
@@ -811,7 +1059,8 @@ async function executeAdobeProjectWorkflowAttempt(options: ExecuteAdobeProjectWo
       photoshopCommitLaunch,
       illustratorReferenceLaunch,
       finalExportLaunch,
-      artworkReview
+      artworkReview,
+      externalReview
     })
   };
 }
@@ -839,6 +1088,7 @@ async function runIllustratorWorkflowJob(
     return runJsxViaIllustratorCom(jobPath, {
       platform: resolveLaunchPlatform(options.launchPlatform),
       dryRun: options.dryRun,
+      timeoutMs: options.timeoutMs,
       root: options.root
     });
   }
@@ -912,6 +1162,553 @@ function visibleMouseProofsOk(proofs: AdobeProjectVisibleMouseProofs | undefined
   }
 
   return Boolean(proofs?.illustratorScene?.ok && proofs.photoshopEdit?.ok && proofs.illustratorReturn?.ok);
+}
+
+async function maybeRunExternalReviewPreflight(
+  options: ExecuteAdobeProjectWorkflowOptions,
+  workflow: AdobeProjectWorkflow,
+  attempt: number,
+  maxReviewIterations: number,
+  previousReviewIterations: AdobeProjectReviewIteration[] = []
+): Promise<AdobeProjectExternalReviewReport | undefined> {
+  const preflight = options.externalReview?.preflight;
+  if (!preflight) {
+    return undefined;
+  }
+
+  let preflightResult: unknown;
+  try {
+    preflightResult = await preflight();
+  } catch (error) {
+    preflightResult = error;
+  }
+
+  if (externalReviewPreflightOk(preflightResult)) {
+    return undefined;
+  }
+
+  const message = externalReviewPreflightMessage(preflightResult);
+  const packet = makeExternalArtworkReviewPacket({
+    goal:
+      "Create a final SVG graphic through a full Adobe Illustrator to Photoshop to Illustrator project handoff, then keep iterating until Codex/local QA and ChatGPT browser review find no concrete improvement worth another revision.",
+    prompt: workflow.prompt,
+    attempt,
+    maxAttempts: maxReviewIterations,
+    finalSvgPath: workflow.outputPath,
+    sourceSvgPath: workflow.sourceSvgPath,
+    photoshopReferencePngPath: workflow.photoshopReferencePngPath,
+    photoshopHandoffSvgPath: workflow.photoshopHandoffSvgPath,
+    photoshopWorkingPsdPath: workflow.photoshopWorkingPsdPath,
+    photoshopFeedbackPath: workflow.photoshopFeedbackPath,
+    artifactEvidence: await collectWorkflowArtifactEvidence(workflow),
+    workflowOk: false,
+    localIssues: [message],
+    handoffSequence: workflow.handoff.sequence,
+    illustratorConsumes: workflow.handoff.illustratorConsumes,
+    reviewHistory: externalReviewHistoryFromIterations(previousReviewIterations)
+  });
+  const packetPath = options.externalReviewPacketPath ? await writeExternalReviewPacket(options.externalReviewPacketPath, packet) : undefined;
+  const providerEvidence = externalReviewProviderEvidenceFromUnknown(preflightResult);
+
+  return {
+    requested: true,
+    ok: false,
+    packet,
+    packetPath,
+    source: "preflight",
+    providerEvidence: providerEvidence ? { ...providerEvidence, readiness: providerEvidence.readiness ?? preflightResult } : { readiness: preflightResult },
+    error: message,
+    nextGoalPrompt: null,
+    issues: [`External ChatGPT browser review preflight failed before launching Adobe jobs: ${message}`]
+  };
+}
+
+async function maybeRunExternalReview(
+  options: ExecuteAdobeProjectWorkflowOptions,
+  workflow: AdobeProjectWorkflow,
+  attempt: number,
+  maxReviewIterations: number,
+  localVerification: {
+    workflowOk: boolean;
+    sourceExportQaOk?: boolean;
+    photoshopReferenceQaOk?: boolean;
+    photoshopHandoffQaOk?: boolean;
+    finalExportQaOk?: boolean;
+    artworkReviewOk?: boolean;
+    artworkReviewScore?: number;
+    localIssues?: string[];
+    localNextGoalPrompt?: string | null;
+  },
+  previousReviewIterations: AdobeProjectReviewIteration[] = []
+): Promise<AdobeProjectExternalReviewReport | undefined> {
+  const providedVerdict = externalVerdictForAttempt(options, attempt);
+  const requested = Boolean(options.externalReview || providedVerdict !== undefined || options.externalReviewPacketPath || options.requireExternalReviewPass);
+  if (!requested) {
+    return undefined;
+  }
+
+  const packet = makeExternalArtworkReviewPacket({
+    goal:
+      "Create a final SVG graphic through a full Adobe Illustrator to Photoshop to Illustrator project handoff, then keep iterating until Codex/local QA and ChatGPT browser review find no concrete improvement worth another revision.",
+    prompt: workflow.prompt,
+    attempt,
+    maxAttempts: maxReviewIterations,
+    finalSvgPath: workflow.outputPath,
+    sourceSvgPath: workflow.sourceSvgPath,
+    photoshopReferencePngPath: workflow.photoshopReferencePngPath,
+    photoshopHandoffSvgPath: workflow.photoshopHandoffSvgPath,
+    photoshopWorkingPsdPath: workflow.photoshopWorkingPsdPath,
+    photoshopFeedbackPath: workflow.photoshopFeedbackPath,
+    artifactEvidence: await collectWorkflowArtifactEvidence(workflow),
+    sourceExportQaOk: localVerification.sourceExportQaOk,
+    photoshopReferenceQaOk: localVerification.photoshopReferenceQaOk,
+    photoshopHandoffQaOk: localVerification.photoshopHandoffQaOk,
+    finalExportQaOk: localVerification.finalExportQaOk,
+    artworkReviewOk: localVerification.artworkReviewOk,
+    artworkReviewScore: localVerification.artworkReviewScore,
+    localIssues: localVerification.localIssues,
+    localNextGoalPrompt: localVerification.localNextGoalPrompt,
+    workflowOk: localVerification.workflowOk,
+    handoffSequence: workflow.handoff.sequence,
+    illustratorConsumes: workflow.handoff.illustratorConsumes,
+    reviewHistory: externalReviewHistoryFromIterations(previousReviewIterations)
+  });
+  const packetPath = options.externalReviewPacketPath ? await writeExternalReviewPacket(options.externalReviewPacketPath, packet) : undefined;
+
+  let callbackVerdict: ExternalArtworkJudgeVerdict | AdobeProjectExternalReviewRunnerResult | unknown | null | undefined;
+  try {
+    callbackVerdict = options.externalReview ? await options.externalReview(packet) : undefined;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const providerEvidence = externalReviewProviderEvidenceFromUnknown(error);
+    return {
+      requested: true,
+      ok: false,
+      packet,
+      packetPath,
+      source: "callback",
+      providerEvidence,
+      error: message,
+      nextGoalPrompt: null,
+      issues: [`External ChatGPT browser review failed before returning verdict JSON: ${message}`]
+    };
+  }
+  const callbackResult = externalReviewRunnerResult(callbackVerdict);
+  const verdictInput = callbackResult?.verdict ?? callbackVerdict ?? providedVerdict;
+  if (verdictInput === undefined || verdictInput === null) {
+    const issues = ["External ChatGPT browser review was requested but no verdict JSON was supplied."];
+    return {
+      requested: true,
+      ok: false,
+      packet,
+      packetPath,
+      nextGoalPrompt: null,
+      issues
+    };
+  }
+
+  const verdict = normalizeExternalArtworkJudgeVerdict(verdictInput);
+  const assessment = assessExternalArtworkJudgeVerdict(verdict, workflow.prompt, options.externalReviewMinScore);
+
+  return {
+    requested: true,
+    ok: assessment.ok,
+    packet,
+    packetPath,
+    verdict,
+    assessment,
+    source: callbackVerdict === undefined ? "provided" : "callback",
+    providerEvidence: callbackResult ? externalReviewProviderEvidence(callbackResult) : undefined,
+    nextGoalPrompt: assessment.nextGoalPrompt,
+    issues: assessment.issues
+  };
+}
+
+function externalVerdictForAttempt(options: ExecuteAdobeProjectWorkflowOptions, attempt: number): ExternalArtworkJudgeVerdict | unknown | undefined {
+  const attemptVerdict = options.externalReviewVerdicts?.[attempt - 1];
+  if (attemptVerdict !== undefined) {
+    return attemptVerdict;
+  }
+
+  return attempt === 1 ? options.externalReviewVerdict : undefined;
+}
+
+function externalReviewHistoryFromIterations(iterations: AdobeProjectReviewIteration[]): ExternalArtworkReviewHistoryItem[] {
+  return iterations.map((iteration) => ({
+    attempt: iteration.attempt,
+    prompt: iteration.prompt,
+    workflowPrompt: iteration.workflowPrompt,
+    localReviewOk: iteration.artworkReviewOk,
+    localIssues: iteration.artworkReviewIssues,
+    localImprovements: iteration.artworkReviewImprovements,
+    externalReviewOk: iteration.externalReviewOk,
+    externalReviewScore: iteration.externalReviewScore,
+    externalSummary: iteration.externalReviewSummary,
+    externalIssues: iteration.externalReviewIssues,
+    externalBlockingFindings: iteration.externalReviewBlockingFindings,
+    nextGoalPrompt: iteration.nextGoalPrompt,
+    feedbackFingerprint: iteration.feedbackFingerprint,
+    repeatedFeedback: iteration.repeatedFeedback
+  }));
+}
+
+function externalReviewPreflightOk(input: unknown): boolean {
+  return typeof input === "object" && input !== null && !Array.isArray(input) && (input as Record<string, unknown>).ok === true;
+}
+
+function externalReviewPreflightMessage(input: unknown): string {
+  if (input instanceof Error) {
+    return input.message;
+  }
+
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    const record = input as Record<string, unknown>;
+    const parts = [record.state, record.summary, record.recommendedAction]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .map((part) => part.trim());
+    if (parts.length > 0) {
+      return parts.join(" ");
+    }
+  }
+
+  return typeof input === "string" && input.trim().length > 0
+    ? input.trim()
+    : "External ChatGPT browser review preflight did not report ready.";
+}
+
+function externalReviewRunnerResult(input: unknown): AdobeProjectExternalReviewRunnerResult | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input) || !("verdict" in input)) {
+    return undefined;
+  }
+
+  return input as AdobeProjectExternalReviewRunnerResult;
+}
+
+function externalReviewProviderEvidence(result: AdobeProjectExternalReviewRunnerResult): AdobeProjectExternalReviewProviderEvidence {
+  return {
+    provider: typeof result.provider === "string" ? result.provider : undefined,
+    command: result.command,
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    responseText: result.responseText,
+    readiness: result.readiness
+  };
+}
+
+function externalReviewProviderEvidenceFromUnknown(input: unknown): AdobeProjectExternalReviewProviderEvidence | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+
+  const record = input as Record<string, unknown>;
+  if (
+    !("command" in record) &&
+    !("exitCode" in record) &&
+    !("stdout" in record) &&
+    !("stderr" in record) &&
+    !("responseText" in record) &&
+    !("readiness" in record)
+  ) {
+    return undefined;
+  }
+
+  return {
+    provider: typeof record.provider === "string" ? record.provider : undefined,
+    command: record.command,
+    exitCode: typeof record.exitCode === "number" || record.exitCode === null ? record.exitCode : undefined,
+    stdout: typeof record.stdout === "string" ? record.stdout : undefined,
+    stderr: typeof record.stderr === "string" ? record.stderr : undefined,
+    responseText: typeof record.responseText === "string" ? record.responseText : undefined,
+    readiness: record.readiness
+  };
+}
+
+async function writeExternalReviewPacket(path: string, packet: ExternalArtworkReviewPacket): Promise<string> {
+  const outputPath = resolveOutputPath(path);
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`, "utf8");
+  return outputPath;
+}
+
+async function collectWorkflowArtifactEvidence(workflow: AdobeProjectWorkflow): Promise<ExternalArtworkReviewArtifactEvidence> {
+  const [
+    finalSvg,
+    sourceSvg,
+    photoshopReferencePng,
+    photoshopHandoffSvg,
+    photoshopWorkingPsd,
+    photoshopFeedback
+  ] = await Promise.all([
+    collectArtifactEvidence(workflow.outputPath),
+    collectArtifactEvidence(workflow.sourceSvgPath),
+    collectArtifactEvidence(workflow.photoshopReferencePngPath),
+    collectArtifactEvidence(workflow.photoshopHandoffSvgPath),
+    collectArtifactEvidence(workflow.photoshopWorkingPsdPath),
+    collectArtifactEvidence(workflow.photoshopFeedbackPath)
+  ]);
+
+  return {
+    finalSvg,
+    sourceSvg,
+    photoshopReferencePng,
+    photoshopHandoffSvg,
+    photoshopWorkingPsd,
+    photoshopFeedback
+  };
+}
+
+async function collectArtifactEvidence(path: string): Promise<ExternalArtworkArtifactEvidenceItem> {
+  try {
+    const stats = await stat(path);
+    if (!stats.isFile()) {
+      return {
+        path,
+        status: "error",
+        reason: "Path exists but is not a file."
+      };
+    }
+
+    return {
+      path,
+      status: "available",
+      bytes: stats.size,
+      sha256: await sha256File(path)
+    };
+  } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error ? (error as { code?: unknown }).code : undefined;
+    if (code === "ENOENT") {
+      return {
+        path,
+        status: "missing",
+        reason: "File does not exist."
+      };
+    }
+
+    return {
+      path,
+      status: "error",
+      reason: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  await new Promise<void>((resolvePromise, reject) => {
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", resolvePromise);
+  });
+  return hash.digest("hex");
+}
+
+async function writeAdobeProjectReviewReport(path: string, report: AdobeProjectReviewReport): Promise<string> {
+  const outputPath = resolveOutputPath(path);
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  return outputPath;
+}
+
+function makeAdobeProjectReviewReport(execution: AdobeProjectWorkflowExecution, originalPrompt: string): AdobeProjectReviewReport {
+  const latestIteration = execution.reviewIterations[execution.reviewIterations.length - 1];
+  const externalReadiness = objectRecordOrUndefined(execution.externalReview?.providerEvidence?.readiness);
+  const externalReviewRequested = Boolean(execution.externalReview?.requested);
+  const roundTripOk = adobeRoundTripProved(execution);
+  const localReviewOk = codexLocalReviewPassed(execution);
+  const chatGptPassed = Boolean(execution.externalReview?.verdict && execution.externalReview.ok);
+  const reviewLoop =
+    execution.reviewLoop ??
+    makeAdobeProjectReviewLoopSummary(
+      execution,
+      execution.reviewIterations,
+      execution.reviewIterations.length,
+      inferReviewLoopStopReason(execution, latestIteration?.nextGoalPrompt ?? null, execution.reviewIterations.length, execution.reviewIterations.length)
+    );
+  const accepted =
+    reviewLoop.status === "accepted" &&
+    !execution.dryRun &&
+    execution.ok &&
+    !latestIteration?.nextGoalPrompt &&
+    (!externalReviewRequested || execution.externalReview?.ok === true);
+  const goalAcceptance =
+    execution.goalAcceptance ??
+    makeFullGoalAcceptance({
+      execution,
+      localAccepted: accepted,
+      roundTripOk,
+      localReviewOk,
+      chatGptPassed,
+      externalReviewRequested
+    });
+
+  return {
+    schemaVersion: "adobe-project-review-report.v1",
+    generatedAt: new Date().toISOString(),
+    ok: execution.ok,
+    dryRun: execution.dryRun,
+    accepted,
+    goalAcceptance,
+    prompt: originalPrompt,
+    finalPrompt: execution.workflow.prompt,
+    finalSvgPath: execution.workflow.outputPath,
+    artifacts: {
+      sourceSvgPath: execution.workflow.sourceSvgPath,
+      photoshopReferencePngPath: execution.workflow.photoshopReferencePngPath,
+      photoshopHandoffSvgPath: execution.workflow.photoshopHandoffSvgPath,
+      photoshopWorkingPsdPath: execution.workflow.photoshopWorkingPsdPath,
+      photoshopFeedbackPath: execution.workflow.photoshopFeedbackPath
+    },
+    requirements: {
+      illustratorPhotoshopRoundTrip: {
+        ok: roundTripOk,
+        sourceExportQaOk: execution.sourceExportQa?.ok,
+        photoshopReferenceQaOk: execution.photoshopReferenceQa?.ok,
+        photoshopHandoffQaOk: execution.photoshopHandoffQa?.ok,
+        finalExportQaOk: execution.finalExportQa?.ok,
+        visibleMouseOk: execution.visibleMouseProofs ? visibleMouseProofsOk(execution.visibleMouseProofs, true) : undefined
+      },
+      codexLocalReview: {
+        ok: localReviewOk,
+        score: execution.artworkReview?.score,
+        issues: execution.artworkReview?.issues ?? [],
+        improvements: execution.artworkReview?.improvements ?? [],
+        nextGoalPrompt: execution.artworkReview?.nextGoalPrompt ?? null
+      },
+      chatGptBrowserReview: {
+        requested: externalReviewRequested,
+        ok: execution.externalReview?.ok ?? false,
+        passed: chatGptPassed,
+        source: execution.externalReview?.source,
+        score: execution.externalReview?.verdict?.score,
+        packetPath: execution.externalReview?.packetPath,
+        state: stringFromRecord(externalReadiness, "state"),
+        requiresHuman: booleanFromRecord(externalReadiness, "requiresHuman"),
+        summary: stringFromRecord(externalReadiness, "summary"),
+        recommendedAction: stringFromRecord(externalReadiness, "recommendedAction"),
+        reasons: stringArrayFromRecord(externalReadiness, "reasons"),
+        error: execution.externalReview?.error,
+        issues: execution.externalReview?.issues ?? [],
+        nextGoalPrompt: execution.externalReview?.nextGoalPrompt ?? null
+      }
+    },
+    reviewLoop,
+    iterations: execution.reviewIterations,
+    next: execution.next
+  };
+}
+
+function adobeRoundTripProved(execution: AdobeProjectWorkflowExecution): boolean {
+  if (execution.dryRun) {
+    return false;
+  }
+
+  return Boolean(
+    execution.sceneLaunch?.ok &&
+      execution.sourceExportLaunch?.ok &&
+      execution.photoshopProjectLaunch?.ok &&
+      (execution.photoshopCommitLaunch?.ok ?? true) &&
+      execution.illustratorReferenceLaunch?.ok &&
+      execution.finalExportLaunch?.ok &&
+      (execution.sceneResult?.result?.ok ?? true) &&
+      (execution.sourceExportResult?.result?.ok ?? true) &&
+      (execution.photoshopProjectResult?.result?.ok ?? true) &&
+      (execution.photoshopCommitResult?.result?.ok ?? true) &&
+      (execution.illustratorReferenceResult?.result?.ok ?? true) &&
+      (execution.finalExportResult?.result?.ok ?? true) &&
+      (execution.sourceExportQa?.ok ?? false) &&
+      (execution.photoshopReferenceQa?.ok ?? false) &&
+      (execution.photoshopHandoffQa?.ok ?? false) &&
+      (execution.finalExportQa?.ok ?? false)
+  );
+}
+
+function codexLocalReviewPassed(execution: AdobeProjectWorkflowExecution): boolean {
+  if (execution.dryRun || !execution.artworkReview) {
+    return false;
+  }
+
+  return execution.artworkReview.ok && !shouldReviseArtworkFromReview(execution.artworkReview);
+}
+
+function makeGoalAcceptanceForExecution(execution: AdobeProjectWorkflowExecution): AdobeProjectGoalAcceptance {
+  const latestIteration = execution.reviewIterations[execution.reviewIterations.length - 1];
+  const externalReviewRequested = Boolean(execution.externalReview?.requested);
+  const roundTripOk = adobeRoundTripProved(execution);
+  const localReviewOk = codexLocalReviewPassed(execution);
+  const chatGptPassed = Boolean(execution.externalReview?.verdict && execution.externalReview.ok);
+  const localAccepted =
+    execution.reviewLoop?.status === "accepted" &&
+    !execution.dryRun &&
+    execution.ok &&
+    !latestIteration?.nextGoalPrompt &&
+    (!externalReviewRequested || execution.externalReview?.ok === true);
+
+  return makeFullGoalAcceptance({
+    execution,
+    localAccepted,
+    roundTripOk,
+    localReviewOk,
+    chatGptPassed,
+    externalReviewRequested
+  });
+}
+
+function makeFullGoalAcceptance(options: {
+  execution: AdobeProjectWorkflowExecution;
+  localAccepted: boolean;
+  roundTripOk: boolean;
+  localReviewOk: boolean;
+  chatGptPassed: boolean;
+  externalReviewRequested: boolean;
+}): AdobeProjectGoalAcceptance {
+  const missing: string[] = [];
+  if (options.execution.dryRun) {
+    missing.push("Run the Adobe project workflow without dryRun.");
+  }
+  if (!options.roundTripOk) {
+    missing.push("Complete and verify the Illustrator -> Photoshop -> Illustrator round trip.");
+  }
+  if (!options.localReviewOk) {
+    missing.push("Pass Codex local export QA and artwork review on the final SVG.");
+  }
+  if (!options.chatGptPassed) {
+    missing.push(
+      options.externalReviewRequested
+        ? "Pass ChatGPT browser external review with a strict verdict JSON."
+        : "Run ChatGPT browser external review with --external-review-provider auracall or a supplied external verdict."
+    );
+  }
+  if (options.execution.reviewLoop?.status === "stalled") {
+    missing.push("Resolve repeated review feedback before claiming final acceptance.");
+  }
+
+  return {
+    accepted: options.localAccepted && options.roundTripOk && options.localReviewOk && options.chatGptPassed && missing.length === 0,
+    localAccepted: options.localAccepted,
+    chatGptBrowserReviewRequired: true,
+    missing
+  };
+}
+
+function objectRecordOrUndefined(input: unknown): Record<string, unknown> | undefined {
+  return typeof input === "object" && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : undefined;
+}
+
+function stringFromRecord(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function booleanFromRecord(record: Record<string, unknown> | undefined, key: string): boolean | undefined {
+  const value = record?.[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function stringArrayFromRecord(record: Record<string, unknown> | undefined, key: string): string[] {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
 function buildRunbook(
@@ -1066,6 +1863,7 @@ function nextSteps(
     illustratorReferenceLaunch: LaunchJobResult;
     finalExportLaunch: LaunchJobResult;
     artworkReview?: ArtworkReviewReport;
+    externalReview?: AdobeProjectExternalReviewReport;
   }
 ): string[] {
   if (dryRun) {
@@ -1095,6 +1893,18 @@ function nextSteps(
     return [launches.artworkReview.nextGoalPrompt];
   }
 
+  if (launches.externalReview?.nextGoalPrompt) {
+    return [launches.externalReview.nextGoalPrompt];
+  }
+
+  if (launches.externalReview && !launches.externalReview.verdict) {
+    return [
+      launches.externalReview.packetPath
+        ? `Submit the external review packet at ${launches.externalReview.packetPath} to ChatGPT Pro/AuraCall, save the returned verdict JSON, and rerun with that verdict before accepting the final SVG.`
+        : "Submit externalReview.packet to ChatGPT Pro/AuraCall, save the returned verdict JSON, and rerun with that verdict before accepting the final SVG."
+    ];
+  }
+
   return skipQa
     ? ["Run QA on the source SVG, Photoshop SVG handoff, Photoshop reference PNG, and final SVG before accepting the collaborative project."]
     : ["Use the final SVG as the collaborative Illustrator project output and keep the Photoshop SVG/PSD/PNG artifacts with it as the return project pass."];
@@ -1106,6 +1916,7 @@ function reviewIteration(
   execution: AdobeProjectWorkflowExecution,
   nextGoalPrompt: string | null
 ): AdobeProjectReviewIteration {
+  const feedbackFingerprint = reviewFeedbackFingerprint(execution, nextGoalPrompt);
   return {
     attempt,
     prompt,
@@ -1117,8 +1928,16 @@ function reviewIteration(
     photoshopHandoffQaOk: execution.photoshopHandoffQa?.ok,
     finalExportQaOk: execution.finalExportQa?.ok,
     artworkReviewOk: execution.artworkReview?.ok,
+    artworkReviewIssues: execution.artworkReview?.issues,
+    artworkReviewImprovements: execution.artworkReview?.improvements,
+    externalReviewOk: execution.externalReview?.ok,
+    externalReviewScore: execution.externalReview?.verdict?.score,
+    externalReviewSummary: execution.externalReview?.verdict?.summary,
+    externalReviewIssues: execution.externalReview?.issues,
+    externalReviewBlockingFindings: execution.externalReview?.verdict?.blocking_findings,
     visibleMouseOk: execution.visibleMouseProofs ? visibleMouseProofsOk(execution.visibleMouseProofs, true) : undefined,
-    nextGoalPrompt
+    nextGoalPrompt,
+    feedbackFingerprint
   };
 }
 
@@ -1130,24 +1949,158 @@ function shouldRunReviewIteration(
 ): nextGoalPrompt is string {
   return Boolean(
     attempt < maxReviewIterations &&
-      execution.artworkReview &&
-      shouldReviseArtworkFromReview(execution.artworkReview) &&
       nextGoalPrompt &&
-      nextGoalPrompt.trim().length > 0
+      nextGoalPrompt.trim().length > 0 &&
+      ((execution.artworkReview && shouldReviseArtworkFromReview(execution.artworkReview)) || Boolean(execution.externalReview?.nextGoalPrompt))
   );
 }
 
-function finalNextSteps(next: string[], reviewIterations: AdobeProjectReviewIteration[]): string[] {
+function nextGoalPromptForIteration(execution: AdobeProjectWorkflowExecution): string | null {
+  return execution.externalReview?.nextGoalPrompt ?? execution.artworkReview?.nextGoalPrompt ?? null;
+}
+
+function finalNextSteps(
+  next: string[],
+  reviewIterations: AdobeProjectReviewIteration[],
+  reviewLoop: AdobeProjectReviewLoopSummary
+): string[] {
   if (reviewIterations.length <= 1) {
     return next;
   }
 
   const last = reviewIterations[reviewIterations.length - 1];
-  const summary = last?.ok
+  const summary = last?.ok && reviewLoop.status !== "stalled"
     ? `Adobe project review passed after ${reviewIterations.length} round-trip iteration(s).`
     : `Adobe project review stopped after ${reviewIterations.length} round-trip iteration(s); use the latest nextGoalPrompt for another full Illustrator-Photoshop-Illustrator pass.`;
 
-  return [summary, ...next];
+  const repeated = reviewLoop.repeatedFeedback
+    ? [
+        `Review loop stopped because attempts ${reviewLoop.repeatedFeedback.attempts.join(
+          " and "
+        )} produced the same actionable feedback. Inspect the repeated nextGoalPrompt before launching more Adobe passes.`
+      ]
+    : [];
+
+  return [summary, ...repeated, ...next];
+}
+
+function makeAdobeProjectReviewLoopSummary(
+  execution: AdobeProjectWorkflowExecution,
+  reviewIterations: AdobeProjectReviewIteration[],
+  maxIterations: number,
+  stopReason: AdobeProjectReviewLoopStopReason
+): AdobeProjectReviewLoopSummary {
+  const latest = reviewIterations[reviewIterations.length - 1];
+  const repeated = latest?.repeatedFeedback && latest.feedbackFingerprint
+    ? {
+        fingerprint: latest.feedbackFingerprint,
+        attempts: [latest.repeatedWithAttempt ?? latest.attempt, latest.attempt],
+        nextGoalPrompt: latest.nextGoalPrompt ?? ""
+      }
+    : undefined;
+  return {
+    status: reviewLoopStatus(execution, stopReason),
+    stopReason,
+    iterations: reviewIterations.length,
+    maxIterations,
+    finalNextGoalPrompt: latest?.nextGoalPrompt ?? null,
+    repeatedFeedback: repeated
+  };
+}
+
+function reviewLoopStatus(
+  execution: AdobeProjectWorkflowExecution,
+  stopReason: AdobeProjectReviewLoopStopReason
+): AdobeProjectReviewLoopStatus {
+  if (stopReason === "repeated-feedback") {
+    return "stalled";
+  }
+
+  if (stopReason === "external-review-preflight") {
+    return "blocked-external-readiness";
+  }
+
+  if (stopReason === "external-review-pending") {
+    return "pending-external-review";
+  }
+
+  if (execution.dryRun) {
+    return "dry-run";
+  }
+
+  return execution.ok ? "accepted" : "needs-revision";
+}
+
+function inferReviewLoopStopReason(
+  execution: AdobeProjectWorkflowExecution,
+  nextGoalPrompt: string | null,
+  attempt: number,
+  maxReviewIterations: number
+): AdobeProjectReviewLoopStopReason {
+  if (execution.externalReview?.source === "preflight") {
+    return "external-review-preflight";
+  }
+
+  if (execution.externalReview?.requested && !execution.externalReview.verdict && !execution.externalReview.error) {
+    return "external-review-pending";
+  }
+
+  if (execution.dryRun) {
+    return "dry-run";
+  }
+
+  if (nextGoalPrompt && attempt >= maxReviewIterations) {
+    return "iteration-limit";
+  }
+
+  if (execution.ok && !nextGoalPrompt) {
+    return "passed";
+  }
+
+  return "failed-without-actionable-prompt";
+}
+
+function findRepeatedFeedback(iterations: AdobeProjectReviewIteration[]): { previousAttempt: number } | undefined {
+  const current = iterations[iterations.length - 1];
+  if (!current?.feedbackFingerprint) {
+    return undefined;
+  }
+
+  const previous = iterations
+    .slice(0, -1)
+    .find((iteration) => iteration.feedbackFingerprint === current.feedbackFingerprint);
+  return previous ? { previousAttempt: previous.attempt } : undefined;
+}
+
+function reviewFeedbackFingerprint(execution: AdobeProjectWorkflowExecution, nextGoalPrompt: string | null): string | undefined {
+  const signature = reviewFeedbackSignature(execution, nextGoalPrompt);
+  if (!signature) {
+    return undefined;
+  }
+
+  return createHash("sha256").update(normalizeReviewFeedbackSignature(signature)).digest("hex").slice(0, 16);
+}
+
+function reviewFeedbackSignature(execution: AdobeProjectWorkflowExecution, nextGoalPrompt: string | null): string | undefined {
+  if (execution.externalReview?.verdict && !execution.externalReview.ok) {
+    const verdict = execution.externalReview.verdict;
+    return [
+      "external",
+      verdict.summary,
+      ...verdict.blocking_findings.map((finding) => `${finding.severity}|${finding.issue}|${finding.required_fix}`),
+      ...verdict.tests_or_checks_required
+    ].join("\n");
+  }
+
+  if (execution.artworkReview && shouldReviseArtworkFromReview(execution.artworkReview)) {
+    return ["local", ...execution.artworkReview.issues, ...execution.artworkReview.improvements].join("\n");
+  }
+
+  return nextGoalPrompt ? `next\n${nextGoalPrompt}` : undefined;
+}
+
+function normalizeReviewFeedbackSignature(signature: string): string {
+  return signature.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 function isObjectPlan(plan: AdobeArtworkPlan): plan is ObjectShapePlan {

@@ -173,6 +173,7 @@ async function runWorkflowJob(
     return runJsxViaIllustratorCom(jobPath, {
       platform: resolveLaunchPlatform(options.launchPlatform),
       dryRun: options.dryRun,
+      timeoutMs: options.timeoutMs,
       root: options.root
     });
   }

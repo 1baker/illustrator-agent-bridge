@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { startBridgeServer } from "../src/bridge/server.js";
@@ -108,6 +108,80 @@ test("HTTP bridge probes Illustrator communication in dry-run mode", async () =>
     assert.equal(body.communicationConfirmed, false);
     assert.equal(body.launch.dryRun, true);
     await access(body.job.jobPath);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge reports Photoshop detect unsupported platforms without launching Photoshop", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-photoshop-detect-"));
+  const server = await startBridgeServer({ port: 0, root });
+
+  try {
+    const response = await fetch(`${server.url}/v1/photoshop/detect?platform=linux`);
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; platform: string; next: string[] };
+    assert.equal(body.ok, false);
+    assert.equal(body.platform, "linux");
+    assert.match(body.next.join("\n"), /Windows or WSL/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge reports ChatGPT browser readiness from AuraCall doctor", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-chatgpt-detect-"));
+  const fakeAuracallPath = join(root, "fake-auracall.sh");
+  await writeFile(
+    fakeAuracallPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+cat <<'JSON'
+{"readiness":{"ok":false,"state":"no-live-managed-browser","summary":"No browser is registered.","recommendedAction":"Run auracall login --target chatgpt.","reasons":["no live managed browser instance"]}}
+JSON
+exit 1
+`,
+    "utf8"
+  );
+  await chmod(fakeAuracallPath, 0o755);
+  const server = await startBridgeServer({ port: 0, root });
+
+  try {
+    const response = await fetch(
+      `${server.url}/v1/chatgpt/detect?auracallCommand=${encodeURIComponent(fakeAuracallPath)}&timeoutSeconds=5`
+    );
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; state: string; reasons: string[]; command: { args: string[] }; next: string[] };
+    assert.equal(body.ok, false);
+    assert.equal(body.state, "no-live-managed-browser");
+    assert.deepEqual(body.reasons, ["no live managed browser instance"]);
+    assert.deepEqual(body.command.args, ["doctor", "--target", "chatgpt", "--json", "--local-only", "--prune-browser-state"]);
+    assert.match(body.next.join("\n"), /auracall login/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge preflights Adobe project workflow prerequisites", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-adobe-preflight-"));
+  const server = await startBridgeServer({ port: 0, root });
+
+  try {
+    const response = await fetch(
+      `${server.url}/v1/workflows/adobe-project/preflight?platform=linux&photoshopPlatform=linux&requireChatGptBrowser=false`
+    );
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      illustrator: { ok: boolean; platform: string };
+      photoshop: { ok: boolean };
+      chatGpt?: unknown;
+    };
+    assert.equal(body.ok, false);
+    assert.equal(body.illustrator.ok, false);
+    assert.equal(body.illustrator.platform, "linux");
+    assert.equal(body.photoshop.ok, false);
+    assert.equal(body.chatGpt, undefined);
   } finally {
     await server.close();
   }
@@ -470,6 +544,7 @@ test("HTTP bridge executes an Adobe SVG proof workflow dry-run", async () => {
 
 test("HTTP bridge executes an Adobe project workflow dry-run", async () => {
   const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-adobe-project-"));
+  const reviewReportPath = join(root, "http-adobe-project.review.json");
   const server = await startBridgeServer({ port: 0, root });
 
   try {
@@ -485,7 +560,8 @@ test("HTTP bridge executes an Adobe project workflow dry-run", async () => {
         illustratorRunMode: "com",
         dryRun: true,
         maxReviewIterations: 3,
-        visibleMouseProof: true
+        visibleMouseProof: true,
+        reviewReportPath
       })
     });
 
@@ -493,6 +569,13 @@ test("HTTP bridge executes an Adobe project workflow dry-run", async () => {
     const body = (await response.json()) as {
       ok: boolean;
       dryRun: boolean;
+      reviewReportPath: string;
+      reviewReport: {
+        schemaVersion: string;
+        dryRun: boolean;
+        accepted: boolean;
+        goalAcceptance: { accepted: boolean; chatGptBrowserReviewRequired: boolean; missing: string[] };
+      };
       reviewIterations: Array<{ attempt: number; nextGoalPrompt: string | null }>;
       workflow: {
         photoshopHandoffSvgPath: string;
@@ -515,6 +598,13 @@ test("HTTP bridge executes an Adobe project workflow dry-run", async () => {
     };
     assert.equal(body.ok, true);
     assert.equal(body.dryRun, true);
+    assert.equal(body.reviewReportPath, reviewReportPath);
+    assert.equal(body.reviewReport.schemaVersion, "adobe-project-review-report.v1");
+    assert.equal(body.reviewReport.dryRun, true);
+    assert.equal(body.reviewReport.accepted, false);
+    assert.equal(body.reviewReport.goalAcceptance.accepted, false);
+    assert.equal(body.reviewReport.goalAcceptance.chatGptBrowserReviewRequired, true);
+    assert.match(body.reviewReport.goalAcceptance.missing.join("\n"), /ChatGPT browser external review/);
     assert.equal(body.reviewIterations.length, 1);
     assert.equal(body.reviewIterations[0]?.attempt, 1);
     assert.equal(body.workflow.runbook.length, 12);
@@ -532,6 +622,10 @@ test("HTTP bridge executes an Adobe project workflow dry-run", async () => {
     assert.equal(body.visibleMouseProofs.illustratorScene.action, "dry-run");
     assert.equal(body.visibleMouseProofs.photoshopEdit.target, "photoshop");
     assert.equal(body.visibleMouseProofs.illustratorReturn.target, "illustrator");
+    const report = JSON.parse(await readFile(reviewReportPath, "utf8"));
+    assert.equal(report.schemaVersion, "adobe-project-review-report.v1");
+    assert.equal(report.goalAcceptance.accepted, false);
+    assert.equal(report.finalSvgPath.endsWith("http-adobe-project.svg"), true);
   } finally {
     await server.close();
   }

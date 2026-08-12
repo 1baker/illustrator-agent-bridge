@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createGeneratedPhotoshopJob } from "../src/bridge/photoshopJobs.js";
 import { generatePhotoshopJsx } from "../src/bridge/photoshopJsxGenerator.js";
-import { runJsxViaPhotoshopCom } from "../src/bridge/photoshopComAutomation.js";
+import { annotatePhotoshopComFailure, runJsxViaPhotoshopCom } from "../src/bridge/photoshopComAutomation.js";
+import { normalizePhotoshopReadiness } from "../src/bridge/photoshopProbe.js";
 
 test("generates a Photoshop-targeted SVG proof JSX job", () => {
   const jsx = generatePhotoshopJsx(
@@ -56,6 +57,40 @@ test("creates a Photoshop proof job and can dry-run Photoshop COM execution", as
   assert.equal(launch.dryRun, true);
   assert.equal(launch.command.command, "powershell.exe");
   assert.match(launch.next.resultContract, /Photoshop/);
+});
+
+test("annotatePhotoshopComFailure explains startup COM factory failures", () => {
+  const stderr = "New-Object : Retrieving the COM class factory failed due to error: 80080005 Server execution failed (CO_E_SERVER_EXEC_FAILURE).";
+  const annotated = annotatePhotoshopComFailure(stderr);
+  assert.match(annotated, /Photoshop COM startup failed/);
+  assert.match(annotated, /Start Photoshop 2026 once/);
+});
+
+test("normalizePhotoshopReadiness reports recent Photoshop crashes as not ready", () => {
+  const readiness = normalizePhotoshopReadiness(
+    {
+      clsid: "{photoshop-clsid}",
+      localServer32: "C:\\Program Files\\Adobe\\Adobe Photoshop 2026\\Photoshop.exe /Automation",
+      appPath: "C:\\Program Files\\Adobe\\Adobe Photoshop 2026\\Photoshop.exe",
+      appExists: true,
+      processes: [],
+      recentCrashEvents: [
+        {
+          timeCreated: "2026-06-28T18:00:00.0000000-05:00",
+          providerName: "Application Error",
+          id: 1000,
+          levelDisplayName: "Error",
+          summary: "Faulting application name: Photoshop.exe | Exception code: 0xc0000005"
+        }
+      ]
+    },
+    "wsl"
+  );
+
+  assert.equal(readiness.ok, false);
+  assert.equal(readiness.comRegistered, true);
+  assert.equal(readiness.recentCrashEvents.length, 1);
+  assert.match(readiness.next.join("\n"), /Photoshop is crashing on launch/);
 });
 
 test("generates a Photoshop project pass with PSD, PNG, SVG, and feedback artifacts", () => {

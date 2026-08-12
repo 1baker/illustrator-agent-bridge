@@ -21,6 +21,7 @@ The bridge has proven no-key Illustrator control on Windows Illustrator from WSL
 - Runs post-export artwork review that combines export QA, vector/pixel checks, scene composition checks, label-reliance checks, and `nextGoalPrompt` output for the next refinement pass.
 - Runs a cross-Adobe SVG proof workflow: natural-language prompt -> semantic/object/scientific plan -> editable Illustrator SVG -> Photoshop COM raster proof PNG -> export QA/artwork review for feedback before accepting the SVG.
 - Runs a collaborative Adobe project workflow: Illustrator creates the editable vector source SVG, Photoshop opens that SVG and writes a layered PSD, PNG preview, feedback JSON, and SVG handoff, Illustrator places that Photoshop SVG handoff back into the active document as a named reference layer, and Illustrator exports the final project SVG. With `--visible-mouse-proof`, the bridge also drives the real mouse in Illustrator, then Photoshop, then Illustrator again; Photoshop commits the return SVG after the visible mouse edit.
+- Can write a strict ChatGPT Pro/AuraCall external review packet for the final Adobe project SVG, consume the returned verdict JSON, or run an opt-in AuraCall browser reviewer directly, then use blocking findings as the next full Illustrator -> Photoshop -> Illustrator revision prompt until the external reviewer passes.
 - Can inspect reviewed SVG, AI, EPS, PDF, or saved bridge scene JSON files and convert detected vector shape combinations into searchable `shape_combination` semantic evidence.
 - Reads Illustrator's result JSON back from `var/results/`.
 - Exposes the same probe through CLI, HTTP dashboard, and MCP tools for an agent/browser workflow.
@@ -39,6 +40,8 @@ See [docs/communication-proof.md](docs/communication-proof.md) for the concrete 
 npm install
 npm run build
 npm run illustrator:detect
+node dist/src/cli.js photoshop:detect --platform wsl
+node dist/src/cli.js chatgpt:detect
 node dist/src/cli.js illustrator:probe --method com --draw-circle --wait
 node dist/src/cli.js illustrator:probe --method com --draw-complex --wait --mouse-proof --mouse-action click --timeout-ms 30000
 npm run illustrator:mouse -- --action move --x 0.5 --y 0.5 --dry-run
@@ -192,9 +195,12 @@ npm run workflow:execute-adobe-svg-proof -- "complex microscope object with obje
 Create and run just the Photoshop proof leg for an existing SVG:
 
 ```bash
+node dist/src/cli.js photoshop:detect --platform wsl
 npm run photoshop:proof-svg -- ./var/exports/figure.svg --output ./var/exports/figure.photoshop-proof.png
 node dist/src/cli.js job:run-photoshop-com <job-id> --platform wsl --dry-run
 ```
+
+`photoshop:detect` is read-only. It checks Photoshop COM registration, executable path, running process state, and recent Windows crash events. Run it before a live Photoshop proof or Adobe project pass when `job:run-photoshop-com` fails to create `Photoshop.Application`.
 
 Run a full Illustrator/Photoshop collaborative project pass:
 
@@ -208,6 +214,29 @@ npm run workflow:execute-adobe-project -- "core shell emulsion polymerization sc
   --max-review-iterations 3
 
 npm run workflow:execute-adobe-project -- "core shell emulsion polymerization scientific concept" \
+  --output ./var/exports/core-shell-project.svg \
+  --intent auto \
+  --illustrator-run-mode com \
+  --platform wsl \
+  --photoshop-platform wsl \
+  --external-review-packet ./var/exports/core-shell-project.external-review.json \
+  --review-report ./var/exports/core-shell-project.review.json \
+  --require-external-review
+
+npm run workflow:execute-adobe-project -- "core shell emulsion polymerization scientific concept" \
+  --output ./var/exports/core-shell-project.svg \
+  --intent auto \
+  --illustrator-run-mode com \
+  --platform wsl \
+  --photoshop-platform wsl \
+  --external-review-provider auracall \
+  --external-review-packet ./var/exports/core-shell-project.external-review.json \
+  --external-review-output ./var/exports/core-shell-project.external-verdict.txt \
+  --review-report ./var/exports/core-shell-project.review.json \
+  --external-review-model gpt-5.2 \
+  --max-review-iterations 3
+
+npm run workflow:execute-adobe-project -- "core shell emulsion polymerization scientific concept" \
   --output ./var/exports/core-shell-project-visible.svg \
   --intent auto \
   --illustrator-run-mode com \
@@ -218,11 +247,17 @@ npm run workflow:execute-adobe-project -- "core shell emulsion polymerization sc
   --max-review-iterations 3
 ```
 
+Run `node dist/src/cli.js workflow:preflight-adobe-project --platform wsl --photoshop-platform wsl` before the heavier project workflow when you need a read-only readiness check. By default, preflight treats a currently responding Photoshop process as usable even if Windows still has recent Photoshop crash events; pass `--photoshop-crash-lookback-minutes N` when you want strict crash-history blocking. Add `--require-chatgpt-browser` or `--external-review-provider auracall` to include AuraCall/ChatGPT browser readiness in the same result. The same preflight is exposed over HTTP as `GET /v1/workflows/adobe-project/preflight` and through MCP as `preflight_adobe_project_workflow`.
+
 `workflow:execute-adobe-project` is the heavier back-and-forth path. It runs Illustrator first to build the editable vector scene and export a source `.illustrator-source.svg`, then runs Photoshop through COM to open that SVG and save a layered `.photoshop-working.psd`, a `.photoshop-reference.png` preview, a `.photoshop-handoff.svg`, and a `.photoshop-feedback.json` file. The workflow then returns to Illustrator, places the Photoshop SVG handoff as a named reference layer in the still-open vector document, exports the final SVG, and runs QA/review. If review returns `nextGoalPrompt` and `--max-review-iterations` is greater than 1, the next pass repeats the full Illustrator -> Photoshop -> Illustrator loop instead of only rechecking the same export.
+
+Pass `--review-report ./var/exports/name.review.json` on final or dry-run project executions when you need an acceptance audit record. The report records whether the run was a dry-run, whether the final SVG was locally accepted, the Illustrator/Photoshop artifact paths, local Codex QA/artwork review status, ChatGPT browser verdict status, review-loop stop reason, per-iteration scores, repeated-feedback detection, and any next prompt required before accepting the SVG. For the full user goal, inspect `reviewReport.goalAcceptance.accepted`: it is true only when the real Adobe round trip, Codex local review, and ChatGPT browser review have all passed. If local review or ChatGPT returns the same actionable feedback on a later round, the loop stops as `stalled` instead of spending more Adobe launches on an unchanged required fix.
 
 With `--visible-mouse-proof`, the project workflow expands to a visible Illustrator -> Photoshop -> Illustrator UI pass. It draws with the real mouse in Illustrator before the source SVG export, opens the source SVG in Photoshop and keeps the document active, drives the real mouse in Photoshop, then sends Escape and runs a Photoshop post-mouse commit job that overwrites the PSD, PNG preview, feedback JSON, and `.photoshop-handoff.svg`. Photoshop saves WSL-hosted PSD/PNG artifacts through a host temp file before copying them back, so Windows Photoshop does not fail on `\\wsl.localhost` save paths. Illustrator then consumes that post-mouse Photoshop SVG handoff as an editable rebuilt reference layer, avoiding fragile linked SVG placement dialogs, receives one more visible mouse return pass, and exports the final SVG. Use `--dry-run` first to inspect all PowerShell COM and mouse commands without opening or moving the apps.
 
 The visible project path also waits briefly before each mouse pass so newly opened Adobe windows expose a measurable target, retries transient Photoshop COM busy responses, and runs final SVG artwork review after export. If review returns `nextGoalPrompt` and `--max-review-iterations` is greater than 1, each next pass uses the original concept text for the scene title instead of nesting guard prompts into the artwork.
+
+For a ChatGPT browser judgment loop, run `node dist/src/cli.js chatgpt:detect` first. It wraps `auracall doctor --target chatgpt --json --local-only --prune-browser-state` and reports whether the managed ChatGPT browser is ready, blocked by Cloudflare/manual-clear, or not running without kicking off a reviewer run. Then run the Adobe project workflow with either `--external-review-provider auracall` or the manual `--external-review-packet` path after local QA is enabled. The AuraCall provider writes a review packet, attaches any existing final/source/handoff/feedback artifacts, preflights browser readiness by default, runs one waited ChatGPT browser reviewer call with `auracall --engine browser --browser-target chatgpt --wait`, parses the saved assistant response as strict JSON, and fails closed if the browser is not live or the verdict is malformed. Use `--external-review-packet` and `--external-review-output` to keep stable audit files, `--external-review-model` plus `--external-review-timeout-seconds` to tune the reviewer run, and `--no-external-review-preflight` only when you intentionally want to skip the readiness gate. The manual packet contains `reviewerPrompt`, final/source/handoff artifact paths, artifact evidence with existence status, byte counts, and SHA-256 hashes, local QA status, prior review-history summaries, concrete previous local issues, and previous ChatGPT blocking findings, plus the exact JSON schema ChatGPT Pro must return; submit it through AuraCall/ChatGPT browser, save the strict JSON response, then rerun with `--external-review-verdict ./path/to/verdict.json --max-review-iterations 3`. A missing required artifact, missing hash, failing verdict, or verdict with `blocking_findings` becomes the next full Illustrator -> Photoshop -> Illustrator revision prompt; a pass requires `pass: true`, score at least 90, no blocking findings, and resolution of any previous blocking findings recorded in the review history.
 
 Inspect reviewed vector assets and turn their shape combinations into searchable evidence:
 

@@ -8,18 +8,21 @@ import { createGeneratedJob } from "../bridge/jobs.js";
 import { generatedJobSummary } from "../bridge/jsxGenerator.js";
 import { launchJsxJob, resolveLaunchPlatform } from "../bridge/launcher.js";
 import { driveIllustratorMouse, drivePhotoshopMouse } from "../bridge/mouseAutomation.js";
+import { detectPhotoshopDesktop } from "../bridge/photoshopProbe.js";
 import { normalizeJobId, readJobStatus, waitForJobResult } from "../bridge/results.js";
 import { normalizeScene } from "../bridge/validation.js";
 import { callIllustratorTool, getIllustratorMcpConfig, listIllustratorTools } from "../mcp/illustratorClient.js";
 import { planObjectShapeScene } from "../planner/objectShapePlanner.js";
 import { planCartoonSceneWithMode } from "../planner/plannerRouter.js";
 import { planScientificConceptScene } from "../planner/scientificConceptPlanner.js";
+import { createAuraCallExternalArtworkReviewRunner, detectAuraCallChatGptBrowser } from "../qa/auracallExternalArtworkJudge.js";
 import { reviewArtworkQuality } from "../qa/artworkReviewGuard.js";
 import { inspectExportArtifact } from "../qa/exportQa.js";
 import { guardObjectShapeScene } from "../qa/objectShapeGuard.js";
 import { loadDefaultCorpus, searchCorpus } from "../semantic/search.js";
 import { inspectVectorShapeFiles } from "../semantic/vectorShapeIngest.js";
 import { executeAdobeProjectWorkflow } from "../workflow/adobeProjectWorkflow.js";
+import { preflightAdobeProjectWorkflow } from "../workflow/adobeProjectPreflight.js";
 import { executeAdobeSvgProofWorkflow } from "../workflow/adobeSvgProofWorkflow.js";
 import { executeCartoonWorkflow } from "../workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow } from "../workflow/objectExecutor.js";
@@ -39,6 +42,7 @@ const objectShapeTargetSchema = z.enum(["cat", "lock", "key"]);
 const objectWorkflowRunModeSchema = z.enum(["launch", "com"]).optional();
 const adobeArtworkIntentSchema = z.enum(["auto", "cartoon", "scientific", "object"]).optional();
 const adobeSvgProofRunModeSchema = z.enum(["launch", "com"]).optional();
+const externalReviewProviderSchema = z.enum(["manual", "auracall"]).optional();
 const semanticKindSchema = z
   .enum([
     "object_semantics",
@@ -187,6 +191,84 @@ export function createAgentMcpServer(): McpServer {
         platform: platform ?? "auto",
         candidates
       });
+    }
+  );
+
+  server.registerTool(
+    "detect_photoshop_desktop",
+    {
+      title: "Detect Photoshop Desktop",
+      description:
+        "Read Photoshop COM registration, executable path, running process state, and recent Windows crash events before running Photoshop COM automation.",
+      inputSchema: {
+        platform: launchPlatformSchema,
+        crashLookbackMinutes: z.number().int().min(1).max(1440).optional(),
+        timeoutMs: z.number().int().min(1000).max(120_000).optional()
+      }
+    },
+    async ({ platform, crashLookbackMinutes, timeoutMs }) => {
+      const result = await detectPhotoshopDesktop({ platform, crashLookbackMinutes, timeoutMs });
+      return jsonToolResult(result);
+    }
+  );
+
+  server.registerTool(
+    "detect_chatgpt_browser",
+    {
+      title: "Detect ChatGPT Browser",
+      description:
+        "Run AuraCall doctor for the managed ChatGPT browser and report whether browser-backed external review can run.",
+      inputSchema: {
+        auracallCommand: z.string().min(1).max(1000).optional(),
+        timeoutSeconds: z.number().int().min(1).max(300).optional()
+      }
+    },
+    async ({ auracallCommand, timeoutSeconds }) => {
+      const result = await detectAuraCallChatGptBrowser({ command: auracallCommand, timeoutSeconds, workdir: process.cwd() });
+      return jsonToolResult(result);
+    }
+  );
+
+  server.registerTool(
+    "preflight_adobe_project_workflow",
+    {
+      title: "Preflight Adobe Project Workflow",
+      description:
+        "Read-only prerequisite check for Illustrator, Photoshop COM, and optional AuraCall ChatGPT browser review before running the full Adobe project workflow.",
+      inputSchema: {
+        platform: launchPlatformSchema,
+        photoshopPlatform: launchPlatformSchema,
+        photoshopCrashLookbackMinutes: z.number().int().min(0).max(1440).optional(),
+        photoshopTimeoutMs: z.number().int().min(1000).max(120_000).optional(),
+        requireChatGptBrowser: z.boolean().optional(),
+        externalReviewProvider: externalReviewProviderSchema,
+        auracallCommand: z.string().min(1).max(1000).optional(),
+        chatGptTimeoutSeconds: z.number().int().min(1).max(300).optional(),
+        chatGptOperationTimeoutSeconds: z.number().int().min(1).max(300).optional()
+      }
+    },
+    async ({
+      platform,
+      photoshopPlatform,
+      photoshopCrashLookbackMinutes,
+      photoshopTimeoutMs,
+      requireChatGptBrowser,
+      externalReviewProvider,
+      auracallCommand,
+      chatGptTimeoutSeconds,
+      chatGptOperationTimeoutSeconds
+    }) => {
+      const result = await preflightAdobeProjectWorkflow({
+        illustratorPlatform: platform,
+        photoshopPlatform,
+        photoshopCrashLookbackMinutes,
+        photoshopTimeoutMs,
+        requireChatGptBrowser: requireChatGptBrowser || externalReviewProvider === "auracall",
+        auracallCommand,
+        chatGptTimeoutSeconds,
+        chatGptOperationTimeoutSeconds
+      });
+      return jsonToolResult(result);
     }
   );
 
@@ -620,6 +702,18 @@ export function createAgentMcpServer(): McpServer {
         proofMinHeight: z.number().int().min(1).optional(),
         proofMinNonBlankRatio: z.number().min(0).max(1).optional(),
         maxReviewIterations: z.number().int().min(1).max(10).optional(),
+        externalReviewProvider: externalReviewProviderSchema,
+        externalReviewPacketPath: z.string().min(1).max(1000).optional(),
+        externalReviewVerdict: z.unknown().optional(),
+        requireExternalReviewPass: z.boolean().optional(),
+        externalReviewMinScore: z.number().min(0).max(100).optional(),
+        externalReviewModel: z.string().min(1).max(120).optional(),
+        externalReviewTimeoutSeconds: z.number().int().min(1).max(7200).optional(),
+        externalReviewPreflight: z.boolean().optional(),
+        externalReviewPreflightTimeoutSeconds: z.number().int().min(1).max(300).optional(),
+        externalReviewOutputPath: z.string().min(1).max(1000).optional(),
+        reviewReportPath: z.string().min(1).max(1000).optional(),
+        auracallCommand: z.string().min(1).max(1000).optional(),
         root: optionalRootSchema
       }
     },
@@ -666,8 +760,33 @@ export function createAgentMcpServer(): McpServer {
       proofMinHeight,
       proofMinNonBlankRatio,
       maxReviewIterations,
+      externalReviewProvider,
+      externalReviewPacketPath,
+      externalReviewVerdict,
+      requireExternalReviewPass,
+      externalReviewMinScore,
+      externalReviewModel,
+      externalReviewTimeoutSeconds,
+      externalReviewPreflight,
+      externalReviewPreflightTimeoutSeconds,
+      externalReviewOutputPath,
+      reviewReportPath,
+      auracallCommand,
       root
     }) => {
+      const externalReview =
+        externalReviewProvider === "auracall"
+          ? createAuraCallExternalArtworkReviewRunner({
+              command: auracallCommand,
+              model: externalReviewModel,
+              timeoutSeconds: externalReviewTimeoutSeconds,
+              workdir: process.cwd(),
+              packetPath: externalReviewPacketPath,
+              outputPath: externalReviewOutputPath,
+              preflightBrowserReadiness: externalReviewPreflight ?? true,
+              preflightTimeoutSeconds: externalReviewPreflightTimeoutSeconds
+            })
+          : undefined;
       const execution = await executeAdobeProjectWorkflow({
         prompt,
         outputPath,
@@ -711,6 +830,12 @@ export function createAgentMcpServer(): McpServer {
         proofMinHeight,
         proofMinNonBlankRatio,
         maxReviewIterations,
+        externalReview,
+        externalReviewPacketPath,
+        externalReviewVerdict,
+        requireExternalReviewPass: requireExternalReviewPass || externalReviewProvider === "auracall",
+        externalReviewMinScore,
+        reviewReportPath,
         root
       });
       return jsonToolResult(execution);
@@ -972,14 +1097,16 @@ export function createAgentMcpServer(): McpServer {
         jobId: z.string().min(1),
         platform: launchPlatformSchema,
         dryRun: z.boolean().optional(),
+        timeoutMs: z.number().int().min(0).max(600_000).optional(),
         root: optionalRootSchema
       }
     },
-    async ({ jobId, platform, dryRun, root }) => {
+    async ({ jobId, platform, dryRun, timeoutMs, root }) => {
       const { jobPath } = await getGeneratedJobPaths(normalizeJobId(jobId), root);
       const result = await runJsxViaIllustratorCom(jobPath, {
         platform: resolveLaunchPlatform(platform),
         dryRun,
+        timeoutMs,
         root
       });
       return jsonToolResult(result);
