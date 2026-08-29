@@ -1,0 +1,17 @@
+{
+  "tolerance": 1,
+  "path": {
+    "type": "path",
+    "id": "membrane-boundary",
+    "name": "curved membrane boundary",
+    "x": 0,
+    "y": 0,
+    "closed": true,
+    "points": [
+      { "x": 200, "y": 60, "leftX": 122.68, "leftY": 60, "rightX": 277.32, "rightY": 60 },
+      { "x": 340, "y": 160, "leftX": 340, "leftY": 104.77, "rightX": 340, "rightY": 215.23 },
+      { "x": 200, "y": 260, "leftX": 277.32, "leftY": 260, "rightX": 122.68, "rightY": 260 },
+      { "x": 60, "y": 160, "leftX": 60, "leftY": 215.23, "rightX": 60, "rightY": 104.77 }
+    ]
+  }
+}

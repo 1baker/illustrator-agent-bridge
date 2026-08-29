@@ -28,6 +28,20 @@ import { executeCartoonWorkflow } from "../workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow } from "../workflow/objectExecutor.js";
 import { prepareCartoonWorkflow } from "../workflow/cartoonWorkflow.js";
 import { prepareObjectShapeWorkflow } from "../workflow/objectWorkflow.js";
+import { renderSceneToSvg } from "../render/svgRenderer.js";
+import { renderSceneToTikz } from "../render/tikzRenderer.js";
+import { renderScientificPlotToPgfplots } from "../render/pgfplotsRenderer.js";
+import { renderSceneToPng } from "../render/pngRenderer.js";
+import { composeRasterLayersToPng } from "../render/rasterCompositor.js";
+import { compileScientificFigure } from "../scientific/figureCompiler.js";
+import { planScientificStory } from "../scientific/storyPlanner.js";
+import { parseScientificText } from "../scientific/textStoryParser.js";
+import { constructPolygonBoolean } from "../core/polygonBoolean.js";
+import { flattenBezierPath } from "../core/bezierFlattening.js";
+import { expandStroke } from "../core/strokeExpansion.js";
+import { placePathMarkers } from "../core/pathMarkers.js";
+import { compileScientificPlot } from "../core/scientificPlot.js";
+import { generateScientificImage } from "../scientific/imageGenerator.js";
 
 const optionalRootSchema = z.string().min(1).optional();
 const optionalUrlSchema = z.string().url().optional();
@@ -65,8 +79,8 @@ export function createAgentMcpServer(): McpServer {
     },
     {
       instructions:
-        "Use these tools to communicate with Adobe Illustrator through either Illustrator Beta MCP or generated ExtendScript jobs. " +
-        "Prefer Illustrator Beta MCP when configured. Use generated JSX jobs when direct MCP is unavailable."
+        "Use generate_scientific_image as the unified Adobe-independent entrypoint for figure, story, controlled-text, and numerical-plot requests, including editable TikZ or PGFPlots LaTeX. The narrower generate_scientific_figure_from_text, generate_scientific_story, generate_scientific_plot, generate_scientific_pgfplots, and render_vector_scene_tikz tools remain available for callers that need their specialized contracts. Use place_path_markers for tangent-aligned scientific terminators, flatten_bezier_path for explicit-tolerance curve approximation, expand_vector_stroke for filled stroke outlines, construct_polygon_boolean for union/intersection/difference/xor, render_vector_scene_png for one derived raster artifact, and compose_vector_scene_layers_png for ordered layers, opacity, masks, and blend modes. " +
+        "Use the Adobe tools only when the caller explicitly needs Illustrator or Photoshop as an optional editing or export adapter."
     }
   );
 
@@ -989,6 +1003,232 @@ export function createAgentMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "render_vector_scene_png",
+    {
+      title: "Render a Vector Scene to PNG",
+      description:
+        "Validate a renderer-independent vector scene, including reusable linear and radial fill or stroke paints, and rasterize it locally into a derived PNG pixel artifact without launching Photoshop or Illustrator.",
+      inputSchema: {
+        scene: z.unknown(),
+        width: z.number().int().min(1).max(14400).optional(),
+        height: z.number().int().min(1).max(14400).optional(),
+        scale: z.number().min(0.1).max(8).optional(),
+        background: z.string().min(1).max(20).optional()
+      }
+    },
+    async ({ scene, width, height, scale, background }) => {
+      const rendered = renderSceneToPng(scene, { width, height, scale, background });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: true,
+              sourceWidth: rendered.sourceWidth,
+              sourceHeight: rendered.sourceHeight,
+              width: rendered.width,
+              height: rendered.height,
+              bytes: rendered.png.length,
+              background: rendered.background,
+              fit: rendered.fit,
+              fontPolicy: rendered.fontPolicy,
+              renderer: rendered.renderer
+            }, null, 2)
+          },
+          { type: "image" as const, data: rendered.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "compose_vector_scene_layers_png",
+    {
+      title: "Compose Vector Scene Layers to PNG",
+      description:
+        "Stack validated vector scenes as ordered layers with visibility, opacity, binary vector masks, and bounded blend modes, then rasterize locally without Photoshop or Illustrator.",
+      inputSchema: {
+        composition: z.unknown(),
+        width: z.number().int().min(1).max(14400).optional(),
+        height: z.number().int().min(1).max(14400).optional(),
+        scale: z.number().min(0.1).max(8).optional(),
+        background: z.string().min(1).max(20).optional()
+      }
+    },
+    async ({ composition, width, height, scale, background }) => {
+      const rendered = composeRasterLayersToPng(composition, { width, height, scale, background });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: true,
+              width: rendered.width,
+              height: rendered.height,
+              bytes: rendered.png.length,
+              layerCount: rendered.layerCount,
+              visibleLayerCount: rendered.visibleLayerCount,
+              background: rendered.background,
+              fit: rendered.fit,
+              fontPolicy: rendered.fontPolicy,
+              renderer: rendered.renderer
+            }, null, 2)
+          },
+          { type: "image" as const, data: rendered.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_image",
+    {
+      title: "Generate a Scientific Image",
+      description:
+        "Use one fail-closed software contract to compile a figure specification, typed story, controlled text, or numerical plot into a semantic vector scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, stage provenance, and digest manifest without Illustrator or Photoshop.",
+      inputSchema: { request: z.unknown() }
+    },
+    async ({ request }) => {
+      const generated = generateScientificImage(request);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ ok: true, manifest: generated.manifest, intermediate: generated.intermediate, scene: generated.scene, svg: generated.svg, latex: generated.latex }, null, 2)
+          },
+          { type: "image" as const, data: generated.png.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "render_vector_scene_tikz",
+    {
+      title: "Render a Vector Scene as TikZ",
+      description: "Render a validated flat-color semantic vector scene as a standalone editable TikZ LaTeX document without launching Adobe software.",
+      inputSchema: { scene: z.unknown() }
+    },
+    async ({ scene }) => jsonToolResult({ ok: true, ...renderSceneToTikz(scene) })
+  );
+
+  server.registerTool(
+    "generate_scientific_plot",
+    {
+      title: "Generate a Scientific Plot",
+      description:
+        "Compile bounded numerical line, scatter, and grouped-bar series with deterministic linear scales, ticks, labels, legends, clipping, and x/y uncertainty bars into a semantic vector scene and editable SVG without Adobe software.",
+      inputSchema: { plot: z.unknown() }
+    },
+    async ({ plot }) => {
+      const result = compileScientificPlot(plot);
+      return jsonToolResult({ ok: true, result, svg: renderSceneToSvg(result.scene) });
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_pgfplots",
+    {
+      title: "Generate a Scientific PGFPlots Document",
+      description: "Validate bounded numerical line, scatter, and grouped-bar data and emit standalone editable PGFPlots LaTeX with explicit compat 1.18, ticks, legends, and uncertainty bars.",
+      inputSchema: { plot: z.unknown() }
+    },
+    async ({ plot }) => {
+      const rendered = renderScientificPlotToPgfplots(plot);
+      return jsonToolResult({ ok: true, latex: rendered.latex, renderer: rendered.renderer, compat: rendered.compat, plot: rendered.plot });
+    }
+  );
+
+  server.registerTool(
+    "place_path_markers",
+    {
+      title: "Place Markers on a Vector Path",
+      description:
+        "Derive start, vertex, or end tangents and construct aligned arrowhead, inhibition-bar, circle, or diamond geometry without launching Adobe software.",
+      inputSchema: { request: z.unknown() }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: placePathMarkers(request) })
+  );
+
+  server.registerTool(
+    "expand_vector_stroke",
+    {
+      title: "Expand a Vector Stroke",
+      description:
+        "Compile a bounded line or cubic path stroke into canonical filled polygon geometry, including caps, joins, miter fallback, dashes, and explicit approximation tolerance, without launching Adobe software.",
+      inputSchema: { request: z.unknown() }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: expandStroke(request) })
+  );
+
+  server.registerTool(
+    "flatten_bezier_path",
+    {
+      title: "Flatten a Bezier Path",
+      description:
+        "Adaptively convert a bounded cubic Bezier path into straight segments using an explicit flatness tolerance, without launching Illustrator.",
+      inputSchema: {
+        request: z.unknown()
+      }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: flattenBezierPath(request) })
+  );
+
+  server.registerTool(
+    "construct_polygon_boolean",
+    {
+      title: "Construct Polygon Boolean Geometry",
+      description:
+        "Apply bounded union, intersection, difference, or xor to closed polygonal regions and return a canonical compound-path element without launching Illustrator.",
+      inputSchema: {
+        request: z.unknown()
+      }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: constructPolygonBoolean(request) })
+  );
+
+  server.registerTool(
+    "generate_scientific_figure_from_text",
+    {
+      title: "Generate a Scientific Figure from Controlled Text",
+      description:
+        "Parse line-oriented controlled scientific statements into an auditable typed story, coordinate-free figure specification, validated semantic vector scene, and editable SVG without launching Adobe software.",
+      inputSchema: {
+        text: z.string().min(1).max(20000),
+        title: z.string().min(1).max(160).optional(),
+        subtitle: z.string().min(1).max(300).optional(),
+        width: z.number().min(500).max(14400).optional(),
+        height: z.number().min(400).max(14400).optional(),
+        direction: z.enum(["left_to_right", "top_to_bottom"]).optional(),
+        spacing: z.enum(["compact", "normal", "open"]).optional()
+      }
+    },
+    async ({ text, title, subtitle, width, height, direction, spacing }) => {
+      const parsed = parseScientificText({ text, title, subtitle, width, height, direction, spacing });
+      const figure = planScientificStory(parsed.story);
+      const scene = compileScientificFigure(figure);
+      return jsonToolResult({ ok: true, parsed, figure, scene, svg: renderSceneToSvg(scene) });
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_story",
+    {
+      title: "Generate a Software-Native Scientific Figure",
+      description:
+        "Convert typed scientific entities and interactions into an inferred coordinate-free figure specification, validated semantic vector scene, and editable SVG without launching Adobe software.",
+      inputSchema: {
+        story: z.unknown()
+      }
+    },
+    async ({ story }) => {
+      const figure = planScientificStory(story);
+      const scene = compileScientificFigure(figure);
+      return jsonToolResult({ ok: true, figure, scene, svg: renderSceneToSvg(scene) });
+    }
+  );
+
+  server.registerTool(
     "plan_scientific_concept_scene_job",
     {
       title: "Plan Scientific Concept Scene and Create JSX Job",
@@ -1279,7 +1519,7 @@ export function createAgentMcpServer(): McpServer {
           mimeType: "application/json",
           text: JSON.stringify(
             {
-              preferredPath: "Illustrator Beta MCP when configured; generated JSX fallback otherwise.",
+              preferredPath: "Software-native controlled text or typed scientific story generation; Adobe adapters only when explicitly needed.",
               tools: [
                 "semantic_search_visual_knowledge",
                 "inspect_vector_shape_files",
@@ -1295,6 +1535,18 @@ export function createAgentMcpServer(): McpServer {
                 "execute_object_shape_workflow",
                 "plan_cartoon_scene_job",
                 "plan_scientific_concept_scene_job",
+                "render_vector_scene_png",
+                "render_vector_scene_tikz",
+                "compose_vector_scene_layers_png",
+                "generate_scientific_image",
+                "generate_scientific_plot",
+                "generate_scientific_pgfplots",
+                "place_path_markers",
+                "expand_vector_stroke",
+                "flatten_bezier_path",
+                "construct_polygon_boolean",
+                "generate_scientific_figure_from_text",
+                "generate_scientific_story",
                 "plan_object_shape_scene_job",
                 "guard_object_shape_scene",
                 "illustrator_beta_list_tools",
@@ -1310,6 +1562,8 @@ export function createAgentMcpServer(): McpServer {
                 "review_artwork_quality"
               ],
               generatedJobContract: {
+                softwareRaster: "render_vector_scene_png derives one scene, including reusable linear and radial vector paints, as PNG; compose_vector_scene_layers_png adds ordered layers, opacity, binary vector masks, and blend modes. Photoshop is optional and the scenes/SVG remain authoritative.",
+                softwareGeometry: "generate_scientific_plot maps bounded numerical data through deterministic axes, ticks, marks, uncertainty, and legends; render_vector_scene_tikz preserves flat-color scene geometry as editable TikZ; generate_scientific_pgfplots preserves numerical plot semantics as editable PGFPlots; place_path_markers derives path tangents and creates scientific terminators; flatten_bezier_path adaptively converts cubic curves to line segments at a declared tolerance; expand_vector_stroke compiles width, caps, joins, and dashes into filled geometry; construct_polygon_boolean performs bounded region set operations.",
                 runInIllustrator: "File > Scripts > Other Script",
                 launchFromDesktop: "bridge_launch_job opens a generated JSX through the host OS when file association or app selection is configured.",
                 result: "Each generated JSX job writes a JSON result file.",

@@ -54,6 +54,13 @@ function generatePingJsx(message: string, options: GenerateOptions): string {
 }
 
 function generateCartoonSceneJsx(scene: CartoonScene, options: GenerateOptions): string {
+  if (scene.paints?.length) {
+    throw new Error("The optional Illustrator adapter does not yet support reusable gradient paints; render the authoritative scene to SVG or PNG first.");
+  }
+  const unsupportedComposition = scene.groups?.length || scene.elements.some((element) => element.groupId !== undefined || element.zIndex !== undefined || element.visible !== undefined);
+  if (unsupportedComposition) {
+    throw new Error("The optional Illustrator adapter does not yet support groups, clipping, z-order, or visibility; render SVG or flatten the composition first.");
+  }
   const document = scene.document ?? {};
   const width = document.width ?? DEFAULT_WIDTH;
   const height = document.height ?? DEFAULT_HEIGHT;
@@ -70,7 +77,7 @@ function generateCartoonSceneJsx(scene: CartoonScene, options: GenerateOptions):
     "    var layer = doc.activeLayer;",
     `    layer.name = ${jsonLiteral(`Agent Bridge - ${title}`)};`,
     `    var docHeight = ${numberLiteral(height)};`,
-    ...scene.elements.map((element, index) => drawElement(element, index)),
+    ...scene.elements.map((element, index) => drawElement(element, index, elementSemanticNote(scene, element))),
     "    app.redraw();",
     `    writeResult('{"ok":true,"jobId":${jsonLiteral(options.id)},"kind":"cartoon_scene","documentName":' + jsonString(doc.name) + ',"elementCount":${scene.elements.length},"app":"Adobe Illustrator","version":' + jsonString(app.version) + '}');`,
     "  } catch (e) {",
@@ -206,6 +213,14 @@ function runtimeFunctions(options: GenerateOptions): string {
     "    }",
     "    item.opacity = opacity;",
     "  }",
+    "  function applyStrokeDetails(item, lineCap, lineJoin, dashArray, dashOffset, miterLimit) {",
+    "    if (!item.stroked) return;",
+    "    if (lineCap !== null) item.strokeCap = lineCap;",
+    "    if (lineJoin !== null) item.strokeJoin = lineJoin;",
+    "    if (dashArray !== null) item.strokeDashes = dashArray;",
+    "    if (dashOffset !== null) item.strokeDashOffset = dashOffset;",
+    "    if (miterLimit !== null) item.strokeMiterLimit = miterLimit;",
+    "  }",
     "  function readTextFile(file) {",
     "    file.encoding = 'UTF-8';",
     "    file.open('r');",
@@ -294,24 +309,27 @@ function runtimeFunctions(options: GenerateOptions): string {
   ].join("\n");
 }
 
-function drawElement(element: SceneElement, index: number): string {
-  const name = element.name ?? `${element.type}_${index + 1}`;
+function drawElement(element: SceneElement, index: number, semanticNote: string | undefined): string {
+  const name = element.name ?? element.id ?? `${element.type}_${index + 1}`;
   const style = withStyleDefaults(element.style);
+  const noteLine = semanticNote ? `    item${index}.note = ${jsonLiteral(semanticNote)};` : "";
 
   if (element.type === "rect") {
     return [
       `    var item${index} = layer.pathItems.rectangle(docHeight - ${numberLiteral(element.y)}, ${numberLiteral(element.x)}, ${numberLiteral(element.width)}, ${numberLiteral(element.height)});`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       styleLine(index, style)
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (element.type === "ellipse") {
     return [
       `    var item${index} = layer.pathItems.ellipse(docHeight - ${numberLiteral(element.y)}, ${numberLiteral(element.x)}, ${numberLiteral(element.width)}, ${numberLiteral(element.height)});`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       styleLine(index, style)
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (element.type === "line") {
@@ -319,9 +337,11 @@ function drawElement(element: SceneElement, index: number): string {
     return [
       `    var item${index} = layer.pathItems.add();`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       `    item${index}.setEntirePath([[${numberLiteral(element.x)}, docHeight - ${numberLiteral(element.y)}], [${numberLiteral(element.x2)}, docHeight - ${numberLiteral(element.y2)}]]);`,
-      `    applyPathStyle(item${index}, null, ${jsonLiteral(stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`
-    ].join("\n");
+      `    applyPathStyle(item${index}, null, ${jsonLiteral(stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`,
+      strokeDetailsLine(index, style)
+    ].filter(Boolean).join("\n");
   }
 
   if (element.type === "polygon") {
@@ -331,6 +351,7 @@ function drawElement(element: SceneElement, index: number): string {
     return [
       `    var item${index} = layer.pathItems.add();`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       `    item${index}.setEntirePath([${points}]);`,
       `    item${index}.closed = true;`,
       styleLine(index, style)
@@ -344,6 +365,7 @@ function drawElement(element: SceneElement, index: number): string {
     return [
       `    var item${index} = layer.pathItems.add();`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       `    item${index}.setEntirePath([${points}]);`,
       `    item${index}.closed = ${element.closed === false ? "false" : "true"};`,
       ...element.points.map((point, pointIndex) => pathPointLines(index, pointIndex, point)),
@@ -353,10 +375,15 @@ function drawElement(element: SceneElement, index: number): string {
       .join("\n");
   }
 
+  if (element.type === "compound_path") {
+    throw new Error("Illustrator JSX adapter does not yet support compound_path; render this scene through the software-native SVG or PNG path");
+  }
+
   const fill = style.fill ?? "#111111";
   return [
     `    var item${index} = layer.textFrames.add();`,
     `    item${index}.name = ${jsonLiteral(name)};`,
+    noteLine,
     `    item${index}.contents = ${jsonLiteral(element.text)};`,
     `    item${index}.left = ${numberLiteral(element.x)};`,
     `    item${index}.top = docHeight - ${numberLiteral(element.y)};`,
@@ -367,6 +394,26 @@ function drawElement(element: SceneElement, index: number): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function elementSemanticNote(scene: CartoonScene, element: SceneElement): string | undefined {
+  if (!element.id) {
+    return undefined;
+  }
+
+  const objects = (scene.semantics?.objects ?? [])
+    .filter((object) => object.elementIds.includes(element.id!))
+    .map((object) => ({ id: object.id, kind: object.kind }));
+  const relationships = (scene.semantics?.relationships ?? [])
+    .filter((relationship) => relationship.visualElementIds?.includes(element.id!))
+    .map((relationship) => ({ id: relationship.id, predicate: relationship.predicate }));
+
+  return JSON.stringify({
+    schema: "scientific-image-generator.element-semantics.v1",
+    elementId: element.id,
+    objects,
+    relationships
+  });
 }
 
 function pathPointLines(itemIndex: number, pointIndex: number, point: PathPoint): string {
@@ -427,17 +474,35 @@ function exportStatement(command: ExportCommand): string {
   ].join("\n");
 }
 
-function withStyleDefaults(style: ElementStyle | undefined): Required<ElementStyle> {
+type ResolvedElementStyle = Required<Pick<ElementStyle, "fill" | "stroke" | "strokeWidth" | "opacity">> &
+  Pick<ElementStyle, "lineCap" | "lineJoin" | "dashArray" | "dashOffset" | "miterLimit">;
+
+function withStyleDefaults(style: ElementStyle | undefined): ResolvedElementStyle {
   return {
     fill: style?.fill === undefined ? "#FFFFFF" : style.fill,
     stroke: style?.stroke === undefined ? "#111111" : style.stroke,
     strokeWidth: style?.strokeWidth ?? 2,
-    opacity: style?.opacity ?? 100
+    opacity: style?.opacity ?? 100,
+    lineCap: style?.lineCap,
+    lineJoin: style?.lineJoin,
+    dashArray: style?.dashArray,
+    dashOffset: style?.dashOffset,
+    miterLimit: style?.miterLimit
   };
 }
 
-function styleLine(index: number, style: Required<ElementStyle>): string {
-  return `    applyPathStyle(item${index}, ${nullableString(style.fill)}, ${nullableString(style.stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`;
+function styleLine(index: number, style: ResolvedElementStyle): string {
+  return [
+    `    applyPathStyle(item${index}, ${nullableString(style.fill)}, ${nullableString(style.stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`,
+    strokeDetailsLine(index, style)
+  ].join("\n");
+}
+
+function strokeDetailsLine(index: number, style: ResolvedElementStyle): string {
+  const cap = style.lineCap === undefined ? "null" : `StrokeCap.${style.lineCap === "round" ? "ROUNDENDCAP" : style.lineCap === "square" ? "PROJECTINGENDCAP" : "BUTTENDCAP"}`;
+  const join = style.lineJoin === undefined ? "null" : `StrokeJoin.${style.lineJoin === "round" ? "ROUNDENDJOIN" : style.lineJoin === "bevel" ? "BEVELENDJOIN" : "MITERENDJOIN"}`;
+  const dashes = style.dashArray === undefined ? "null" : `[${style.dashArray.map(numberLiteral).join(", ")}]`;
+  return `    applyStrokeDetails(item${index}, ${cap}, ${join}, ${dashes}, ${style.dashOffset === undefined ? "null" : numberLiteral(style.dashOffset)}, ${style.miterLimit === undefined ? "null" : numberLiteral(style.miterLimit)});`;
 }
 
 function nullableString(value: string | null): string {

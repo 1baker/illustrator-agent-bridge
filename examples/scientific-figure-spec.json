@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "title": "Signal-driven gene response",
+    "subtitle": "One declarative specification compiled into layout, symbols, routes, labels, semantics, styles, and SVG",
+    "width": 1200,
+    "height": 760
+  },
+  "objects": [
+    {
+      "id": "ligand",
+      "kind": "signaling_molecule",
+      "label": "ligand",
+      "x": 70,
+      "y": 310,
+      "width": 76,
+      "height": 76,
+      "shape": "ellipse",
+      "recipe": "molecule",
+      "styleRole": "primary_object",
+      "labelPositions": ["bottom", "top", "left", "right", "inside"]
+    },
+    {
+      "id": "receptor",
+      "kind": "membrane_receptor",
+      "label": "membrane receptor",
+      "x": 280,
+      "y": 290,
+      "width": 170,
+      "height": 116,
+      "shape": "rect",
+      "recipe": "receptor",
+      "styleRole": "secondary_object"
+    },
+    {
+      "id": "kinase",
+      "kind": "protein_kinase",
+      "label": "protein kinase",
+      "width": 150,
+      "height": 88,
+      "shape": "rect",
+      "recipe": "protein",
+      "styleRole": "secondary_object"
+    },
+    {
+      "id": "nucleus",
+      "kind": "cellular_compartment",
+      "label": "nucleus",
+      "x": 900,
+      "y": 245,
+      "width": 240,
+      "height": 230,
+      "shape": "ellipse",
+      "recipe": "nucleus",
+      "styleRole": "compartment",
+      "labelPositions": ["top", "inside", "bottom", "left", "right"]
+    },
+    {
+      "id": "gene_response",
+      "kind": "gene_expression_process",
+      "label": "gene response",
+      "width": 124,
+      "height": 66,
+      "shape": "rect",
+      "recipe": "process",
+      "styleRole": "primary_object",
+      "labelPositions": ["inside", "bottom", "top", "right", "left"]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "kinase-after-receptor",
+      "type": "gap",
+      "sourceId": "kinase",
+      "targetId": "receptor",
+      "direction": "right",
+      "gap": 190
+    },
+    {
+      "id": "kinase-center-receptor",
+      "type": "align",
+      "sourceId": "kinase",
+      "targetId": "receptor",
+      "axis": "y",
+      "mode": "center"
+    },
+    {
+      "id": "gene-inside-nucleus",
+      "type": "contain",
+      "childId": "gene_response",
+      "containerId": "nucleus",
+      "padding": 42
+    }
+  ],
+  "relationships": [
+    {
+      "id": "binding",
+      "sourceObjectId": "ligand",
+      "predicate": "binds_to",
+      "targetObjectId": "receptor",
+      "label": "binds",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "role": "activation"
+    },
+    {
+      "id": "kinase_activation",
+      "sourceObjectId": "receptor",
+      "predicate": "activates",
+      "targetObjectId": "kinase",
+      "label": "activates",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "role": "activation"
+    },
+    {
+      "id": "expression_activation",
+      "sourceObjectId": "kinase",
+      "predicate": "activates",
+      "targetObjectId": "gene_response",
+      "label": "induces",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "role": "activation"
+    },
+    {
+      "id": "nuclear_containment",
+      "sourceObjectId": "gene_response",
+      "predicate": "contained_in",
+      "targetObjectId": "nucleus",
+      "visual": "semantic_only"
+    }
+  ],
+  "settings": {
+    "routeClearance": 18
+  }
+}

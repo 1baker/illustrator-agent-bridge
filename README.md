@@ -1,4 +1,8 @@
-# Illustrator Agent Bridge
+# Scientific vector generator with optional Adobe adapters
+
+The software-native scientific image pipeline owns its semantic scene graph, vector geometry, symbol recipes, layout constraints, validation, and SVG rendering. Illustrator and Photoshop are optional execution/editing adapters; neither application is required to generate or test the figures. See [docs/software-native-architecture.md](docs/software-native-architecture.md).
+
+## Legacy bridge capabilities
 
 Early bridge for connecting an LLM or browser agent to Adobe Illustrator, with two execution paths:
 
@@ -48,6 +52,37 @@ npm run illustrator:mouse -- --action move --x 0.5 --y 0.5 --dry-run
 npm run photoshop:mouse -- --platform wsl --action drag --x 0.34 --y 0.54 --to-x 0.66 --to-y 0.58 --tool-shortcut b --dry-run
 npm run jsx:ping
 npm run jsx:cartoon
+npm run render:geometry-basics
+npm run render:raster-basics
+npm run render:compositing-basics
+npm run render:stroke-fill-basics
+npm run render:paint-basics
+npm run render:scientific-object-basics
+npm run scientific:compose
+npm run scientific:generate
+npm run scientific:auto-layout
+npm run scientific:story
+npm run scientific:text
+npm run scientific:plot
+npm run scientific:pgfplots
+npm run scientific:image
+npm run render:tikz
+npm run scientific:interaction-grammar
+npm run scientific:symbol-vocabulary
+npm run geometry:transform-basics
+npm run geometry:composition-basics
+npm run geometry:constraint-basics
+npm run geometry:routing-basics
+npm run geometry:label-style-basics
+npm run geometry:boolean
+npm run geometry:boolean-curves
+npm run geometry:boolean-basics
+npm run geometry:flatten-curve
+npm run geometry:curve-basics
+npm run geometry:expand-stroke
+npm run geometry:stroke-expansion-basics
+npm run geometry:path-markers
+npm run geometry:path-marker-basics
 npm run semantic:search -- "cartoon lab flask"
 npm run semantic:search -- "electron transfer membrane" -- --kind scientific_concept
 npm run semantic:inspect-vector -- ./examples/cartoon-scene.json
@@ -74,6 +109,118 @@ npm run plan:cartoon -- "cartoon lab scientist with flask" -- --planner openai
 ```
 
 The `jsx:*` commands write jobs under `var/jobs/` and expected results under `var/results/`. In Illustrator, run a generated job with `File > Scripts > Other Script`, then inspect the matching result JSON.
+
+For the Adobe-independent geometry foundation, render the same validated scene model directly to editable SVG:
+
+```bash
+npm run render:geometry-basics
+node dist/src/cli.js render:svg examples/geometry-basics-scene.json --output var/exports/geometry-basics.svg
+```
+
+This path demonstrates the core representation—points, line segments, open paths, closed paths, stroke, and optional fill—with no Adobe dependency. SVG is the primary renderer. Illustrator is merely an optional editor/export adapter rather than the owner of the scientific scene model. See [docs/geometry-foundations.md](docs/geometry-foundations.md).
+
+The next vector lesson makes stroke and fill precise. It compares butt, round, and square line caps; miter, round, and bevel joins; rounded dash patterns; and an `evenodd` compound path whose inner boundary creates a genuinely transparent hole:
+
+```bash
+npm run render:stroke-fill-basics
+```
+
+This supports scientific membranes, pores, vessels, hollow particles, compartment boundaries, and visual conventions for indirect or proposed relationships. See [docs/stroke-and-compound-fill.md](docs/stroke-and-compound-fill.md).
+
+Reusable vector paints separate geometry from appearance. Named linear and radial gradients can fill a region or paint a stroke, use object-relative or document coordinates, and preserve explicit ordered color stops. Run `npm run render:paint-basics`; see [docs/vector-paints.md](docs/vector-paints.md).
+
+Polygon boolean construction replaces the foundational role of Illustrator's Pathfinder panel. Union, intersection, difference, and XOR accept bounded polygonal regions and return canonical compound paths with measured area, bounds, and topology:
+
+```bash
+npm run geometry:boolean
+npm run geometry:boolean-basics
+```
+
+The lesson shows merged regions, shared domains, exclusions, and non-overlapping populations. Curves are never silently approximated; curved operands require a declared tolerance and report their subdivision provenance. See [docs/polygon-boolean-construction.md](docs/polygon-boolean-construction.md).
+
+Cubic Bézier curves are defined by anchors plus incoming and outgoing control handles. The software-native flattener recursively subdivides each curve until its control hull lies within a declared tolerance of the resulting straight chords. Closed flattened curves can then become filled regions or enter the same boolean pipeline:
+
+```bash
+npm run geometry:flatten-curve
+npm run geometry:curve-basics
+```
+
+The visual lesson traces the compiler pipeline from anchors and handles through coarse and fine approximations to a filled membrane-like region and a computed curved intersection. No Adobe application participates. See [docs/bezier-curve-flattening.md](docs/bezier-curve-flattening.md).
+
+Stroke expansion turns renderer appearance into topology. A line or curved path plus width, caps, joins, miter limit, and dash pattern is compiled into a canonical filled compound path with measured area and bounds:
+
+```bash
+npm run geometry:expand-stroke
+npm run geometry:stroke-expansion-basics
+```
+
+The lesson shows width expansion, butt/round/square endpoint construction, miter/round/bevel corners, independently capped dash regions, and the transparent hole created by expanding a closed centerline. See [docs/stroke-expansion.md](docs/stroke-expansion.md).
+
+Path markers turn direction into reusable scientific symbols. Straight vectors, cubic endpoint handles, and interior angle bisectors orient arrowheads, inhibition bars, circles, and diamonds as explicit scene geometry. Run `npm run geometry:path-markers` or `npm run geometry:path-marker-basics`; see [docs/path-markers.md](docs/path-markers.md).
+
+The same validated scene can be rasterized directly to PNG without Photoshop:
+
+```bash
+npm run render:raster-basics
+node dist/src/cli.js render:png examples/geometry-basics-scene.json --output var/exports/geometry-basics.png
+```
+
+The vector scene and SVG remain the source of truth; PNG is a derived export for publication, previews, and pixel-based consumers. The software renderer supports bounded resizing, opaque or transparent backgrounds, CLI/HTTP/MCP access, and rejects unsafe external SVG content. See [docs/software-native-rasterization.md](docs/software-native-rasterization.md).
+
+Software-native compositing stacks complete vector scenes as ordered layers. Each layer can be visible or hidden, carry whole-layer opacity, use a rectangle/ellipse/polygon/path mask, and select a bounded blend mode. The compositor namespaces every nested SVG identifier, writes an inspectable assembled SVG, and derives the final PNG locally:
+
+```bash
+npm run render:compositing-basics
+```
+
+This covers the foundational layer-assembly role associated with Photoshop while preserving editable vector sources. It does not claim to implement Photoshop's painting, adjustment layers, filters, or retouching tools. See [docs/software-native-compositing.md](docs/software-native-compositing.md).
+
+The next layer adds stable IDs, scientific objects, and explicit relationships:
+
+```bash
+npm run render:scientific-object-basics
+```
+
+The example distinguishes raw geometry from meaning: several ellipses and lines compose a `cell`, `membrane_receptor`, and `ligand`, while validated relationships state that the receptor is `embedded_in` the cell and the ligand `binds_to` the receptor. SVG output embeds the full semantic graph plus element annotations. Illustrator page items retain their element/object identity in `note` metadata. See [docs/scientific-scene-graph.md](docs/scientific-scene-graph.md).
+
+The reusable recipe layer accepts a shorter scientific specification and expands it into geometry plus semantics:
+
+```bash
+npm run scientific:compose
+node dist/src/cli.js scientific:compose examples/scientific-symbol-composition.json \
+  --scene-output var/exports/composed.scene.json \
+  --svg-output var/exports/composed.svg
+```
+
+The initial recipe library supports `cell`, `membrane_receptor`, and `ligand`. Named object-local ports resolve placement dependencies; cycles, missing targets, and unintended collisions fail validation. Directed relationships automatically receive a boundary-to-boundary line, oriented arrowhead, label, semantic record, and stable IDs. See [docs/scientific-symbol-recipes.md](docs/scientific-symbol-recipes.md).
+
+The next geometry lesson defines one triangle in local coordinates and instantiates it through translation, rotation, and scaling matrices. Rectangles and ellipses can also be flattened into rotation-safe polygons and cubic paths. Run `npm run geometry:transform-basics` and see [docs/coordinate-transforms.md](docs/coordinate-transforms.md).
+
+The composition lesson adds nested groups, explicit z-order, visibility, group opacity, and closed clipping boundaries. Its cell example distinguishes visual clipping from the semantic assertion that a nucleus or particle set is `contained_in` a cell. Run `npm run geometry:composition-basics` and see [docs/composition-basics.md](docs/composition-basics.md).
+
+The constraint lesson replaces dependent hand-authored coordinates with declarative alignment, exact gaps, and padded containment. Its deterministic solver supports forward references and rejects cycles, missing assignments, conflicting assignments, and escaped children. Run `npm run geometry:constraint-basics` and see [docs/constraint-layout.md](docs/constraint-layout.md).
+
+The routing lesson converts semantic relationships into port-to-port orthogonal paths. A visibility-graph search maintains obstacle clearance and scores length, bends, and intersections with already-routed relationships. Run `npm run geometry:routing-basics` and see [docs/relationship-routing.md](docs/relationship-routing.md).
+
+The label and style lesson places annotations from ranked candidates, avoids objects and earlier labels, adds leader lines, and fails when no legal placement exists. Validated semantic theme roles coordinate color, stroke, opacity, typography, and minimum contrast without involving Adobe software. Run `npm run geometry:label-style-basics` and see [docs/label-placement-and-styles.md](docs/label-placement-and-styles.md).
+
+The figure compiler is the first complete software-native generator pass. One JSON specification now drives constraint layout, multi-part scientific symbol recipes, scientific roles, automatic labels, obstacle-aware relationships, connector conventions, semantic identity, final validation, and SVG output. The registry includes generic, cell, nucleus, receptor, molecule, protein, process, DNA, RNA, membrane, organelle, particle, and apparatus recipes. Run `npm run scientific:generate`; see [docs/scientific-figure-compiler.md](docs/scientific-figure-compiler.md) and [docs/scientific-symbol-registry.md](docs/scientific-symbol-registry.md).
+
+Coordinate-free generation uses layered graph layout. The specification supplies object sizes and directed relationships but no `x` or `y`; the engine condenses feedback loops, assigns deterministic ranks, centers each rank, and fails when the canvas cannot fit the result. Run `npm run scientific:auto-layout` and see [docs/automatic-graph-layout.md](docs/automatic-graph-layout.md).
+
+The scientific story planner moves the authoring boundary up one more level. A story declares only typed scientific entities and interactions; deterministic software infers symbol recipes, dimensions, styling roles, layered layout, ports, routes, and connector conventions. Run `npm run scientific:story` and see [docs/scientific-story-planner.md](docs/scientific-story-planner.md).
+
+The controlled-text parser adds a small plain-language boundary without handing scientific interpretation to a renderer or desktop application. Typed first mentions such as `DNA template [dna] converts to RNA transcript [rna].` compile into an auditable story, figure, scene, SVG, and derived PNG; unknown or ambiguous statements fail with their line number. Run `npm run scientific:text` and see [docs/scientific-controlled-text.md](docs/scientific-controlled-text.md).
+
+The numerical plot compiler maps bounded line, scatter, and grouped-bar data through deterministic linear scales into axes, ticks, labels, clipped marks, x/y uncertainty bars, legends, and semantic vector objects. The example combines baseline bars, a model trajectory, and measured mean ± standard deviation in editable SVG, editable PGFPlots LaTeX, and derived PNG. Run `npm run scientific:plot` or `npm run scientific:pgfplots`; see [docs/scientific-plots.md](docs/scientific-plots.md) and [docs/latex-vector-rendering.md](docs/latex-vector-rendering.md).
+
+The unified scientific-image generator puts the figure, typed-story, controlled-text, and numerical-plot compilers behind one fail-closed request envelope. Every kind produces the same semantic scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, intermediate record, and digest manifest with explicit `adobeUsed: false`. Run `npm run scientific:image`; see [docs/scientific-image-generator.md](docs/scientific-image-generator.md).
+
+The connector grammar keeps scientific interactions visually distinct. Activation, inhibition, association, transport, and conversion each receive a validated role, stroke token, and terminator rule while retaining their exact semantic predicate. Run `npm run scientific:interaction-grammar` and see [docs/scientific-connector-grammar.md](docs/scientific-connector-grammar.md).
+
+Connector terminators use the shared path-marker service. It derives exact line or cubic endpoint tangents and creates ordinary vector elements, keeping Illustrator optional. See [docs/path-markers.md](docs/path-markers.md).
+
+The expanded symbol vocabulary adds DNA, RNA, lipid membrane, organelle, nanoparticle, and laboratory apparatus recipes. Each symbol is an explicit composition of filled or empty primitive vector parts rather than a bitmap or desktop-app object. Run `npm run scientific:symbol-vocabulary` and see [docs/scientific-symbol-registry.md](docs/scientific-symbol-registry.md).
 On Windows or WSL, the quickest no-API communication proof is COM automation:
 
 ```bash
@@ -321,7 +468,10 @@ Expose the bridge itself as an MCP server over stdio:
 npm run mcp:serve
 ```
 
-That server exposes tools to create Illustrator JSX jobs and to proxy Illustrator Beta MCP calls when `ILLUSTRATOR_MCP_URL` and `ILLUSTRATOR_MCP_TOKEN` are configured.
+That server exposes `generate_scientific_image` as the unified Adobe-independent generator, the narrower `generate_scientific_figure_from_text`, `generate_scientific_story`, and `generate_scientific_plot` tools, plus legacy tools for creating Illustrator JSX jobs and proxying Illustrator Beta MCP calls when configured.
+Use `generate_scientific_image` for new general-purpose callers. Its `kind` selects `figure`, `story`, `text`, or `plot`, while its common result includes stage provenance, a semantic scene, editable SVG, derived PNG, and an artifact digest manifest.
+Use `generate_scientific_figure_from_text` for controlled line-oriented statements. It returns the parse trace, typed story, inferred coordinate-free figure specification, resolved semantic vector scene, and editable SVG. The equivalent HTTP operation is `POST /v1/scientific/text`.
+Use `generate_scientific_story` when an agent has typed scientific entities and interactions. It returns the inferred coordinate-free figure specification, resolved semantic vector scene, and editable SVG without launching Illustrator or Photoshop. The equivalent HTTP operation is `POST /v1/scientific/story`.
 It also exposes `semantic_search_visual_knowledge` so an agent can retrieve object semantics and publication constraints before mutating Illustrator.
 Use `inspect_vector_shape_files` on local reviewed vector files when a browser agent needs shape-combination evidence before updating a corpus.
 Use `detect_illustrator_desktop` and `probe_illustrator_communication` first to prove local no-key Illustrator communication. On Windows/WSL, pass `method: "com"`, `drawCircle: true`, and `waitForResult: true` to prove Illustrator can draw a circle and report completion.

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { startAgentMcpStdioServer } from "./agent/mcpServer.js";
 import { getGeneratedJobPaths } from "./bridge/files.js";
 import { runJsxViaIllustratorCom } from "./bridge/comAutomation.js";
@@ -39,6 +41,32 @@ import { prepareObjectShapeWorkflow } from "./workflow/objectWorkflow.js";
 import { planScientificConceptScene } from "./planner/scientificConceptPlanner.js";
 import type { SemanticKind } from "./semantic/types.js";
 import { inspectVectorShapeFiles, mergeShapeCombinationItems } from "./semantic/vectorShapeIngest.js";
+import { renderSceneToSvg } from "./render/svgRenderer.js";
+import { renderSceneToTikz } from "./render/tikzRenderer.js";
+import { renderScientificPlotToPgfplots } from "./render/pgfplotsRenderer.js";
+import { compileLatexWithTectonic } from "./render/latexCompiler.js";
+import { renderSceneToPng, type PngRenderOptions } from "./render/pngRenderer.js";
+import { composeRasterLayersToPng } from "./render/rasterCompositor.js";
+import { composeScientificDiagram } from "./scientific/diagramComposer.js";
+import { composeTransformBasicsScene } from "./scientific/transformBasics.js";
+import { composeCompositionBasicsScene } from "./scientific/compositionBasics.js";
+import { composeConstraintBasicsScene } from "./scientific/constraintBasics.js";
+import { composeRoutingBasicsScene } from "./scientific/routingBasics.js";
+import { composeLabelStyleBasicsScene } from "./scientific/labelStyleBasics.js";
+import { compileScientificFigure } from "./scientific/figureCompiler.js";
+import { planScientificStory } from "./scientific/storyPlanner.js";
+import { parseScientificText } from "./scientific/textStoryParser.js";
+import { constructPolygonBoolean } from "./core/polygonBoolean.js";
+import { flattenBezierPath } from "./core/bezierFlattening.js";
+import { expandStroke } from "./core/strokeExpansion.js";
+import { placePathMarkers } from "./core/pathMarkers.js";
+import { compileScientificPlot } from "./core/scientificPlot.js";
+import { composeBooleanGeometryBasicsScene } from "./scientific/booleanGeometryBasics.js";
+import { composeCurveGeometryBasicsScene } from "./scientific/curveGeometryBasics.js";
+import { composeStrokeExpansionBasicsScene } from "./scientific/strokeExpansionBasics.js";
+import { composePathMarkerBasicsScene } from "./scientific/pathMarkerBasics.js";
+import { composeVectorPaintBasicsScene } from "./scientific/vectorPaintBasics.js";
+import { generateScientificImage } from "./scientific/imageGenerator.js";
 
 async function main(argv: string[]): Promise<void> {
   const [command, ...rest] = argv;
@@ -58,6 +86,81 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "jsx:cartoon":
       await makeCartoon(rest);
+      return;
+    case "render:svg":
+      await renderSvg(rest);
+      return;
+    case "render:tikz":
+      await renderTikz(rest);
+      return;
+    case "render:png":
+      await renderPng(rest);
+      return;
+    case "render:composite":
+      await renderRasterComposite(rest);
+      return;
+    case "scientific:compose":
+      await composeScientific(rest);
+      return;
+    case "scientific:generate":
+      await generateScientificFigure(rest);
+      return;
+    case "scientific:story":
+      await generateScientificStory(rest);
+      return;
+    case "scientific:text":
+      await generateScientificText(rest);
+      return;
+    case "scientific:plot":
+      await generateScientificPlot(rest);
+      return;
+    case "scientific:pgfplots":
+      await generateScientificPgfplots(rest);
+      return;
+    case "scientific:image":
+      await generateUnifiedScientificImage(rest);
+      return;
+    case "geometry:transform-basics":
+      await renderTransformBasics(rest);
+      return;
+    case "geometry:composition-basics":
+      await renderCompositionBasics(rest);
+      return;
+    case "geometry:constraint-basics":
+      await renderConstraintBasics(rest);
+      return;
+    case "geometry:routing-basics":
+      await renderRoutingBasics(rest);
+      return;
+    case "geometry:label-style-basics":
+      await renderLabelStyleBasics(rest);
+      return;
+    case "geometry:boolean":
+      await constructBooleanGeometry(rest);
+      return;
+    case "geometry:flatten-curve":
+      await flattenCurveGeometry(rest);
+      return;
+    case "geometry:expand-stroke":
+      await expandStrokeGeometry(rest);
+      return;
+    case "geometry:path-markers":
+      await placePathMarkerGeometry(rest);
+      return;
+    case "geometry:boolean-basics":
+      await renderBooleanGeometryBasics(rest);
+      return;
+    case "geometry:curve-basics":
+      await renderCurveGeometryBasics(rest);
+      return;
+    case "geometry:stroke-expansion-basics":
+      await renderStrokeExpansionBasics(rest);
+      return;
+    case "geometry:path-marker-basics":
+      await renderPathMarkerBasics(rest);
+      return;
+    case "render:paint-basics":
+      await renderVectorPaintBasics(rest);
       return;
     case "jsx:export":
       await makeExport(rest);
@@ -210,6 +313,570 @@ async function makeCartoon(args: string[]): Promise<void> {
   const job = await createGeneratedJob({ kind: "cartoon_scene", scene }, optionValue(options, "root"));
 
   console.log(JSON.stringify({ ok: true, job: generatedJobSummary(job) }, null, 2));
+}
+
+async function renderSvg(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const scenePath = options.positionals[0] ?? "examples/geometry-basics-scene.json";
+  const outputValue = optionValue(options, "output") ?? "var/exports/geometry-basics.svg";
+  const outputPath = resolve(outputValue);
+  const scene = normalizeScene(await readJsonFile(scenePath));
+  const svg = renderSceneToSvg(scene);
+  const pngOutputValue = optionValue(options, "png-output");
+  const pngOutputPath = pngOutputValue === undefined ? undefined : resolve(pngOutputValue);
+  const renderedPng = pngOutputPath === undefined ? undefined : renderSceneToPng(scene, pngOptions(options, "png-"));
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, svg, "utf8");
+  if (pngOutputPath !== undefined && renderedPng !== undefined) {
+    await mkdir(dirname(pngOutputPath), { recursive: true });
+    await writeFile(pngOutputPath, renderedPng.png);
+  }
+
+  console.log(JSON.stringify({ ok: true, scenePath: resolve(scenePath), outputPath, pngOutputPath, pngBytes: renderedPng?.png.length, elementCount: scene.elements.length }, null, 2));
+}
+
+async function renderTikz(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const scenePath = options.positionals[0] ?? "examples/geometry-basics-scene.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/geometry-basics.tex");
+  const pdfOutputValue = optionValue(options, "pdf-output");
+  const pdfOutputPath = pdfOutputValue === undefined ? undefined : resolve(pdfOutputValue);
+  const rendered = renderSceneToTikz(await readJsonFile(scenePath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, rendered.latex, "utf8");
+  const compiled = pdfOutputPath === undefined ? undefined : await compileLatexWithTectonic(rendered.latex, { enginePath: resolveTectonicPath(options) });
+  if (compiled && pdfOutputPath) {
+    await mkdir(dirname(pdfOutputPath), { recursive: true });
+    await writeFile(pdfOutputPath, compiled.pdf);
+  }
+  console.log(JSON.stringify({ ok: true, scenePath: resolve(scenePath), outputPath, pdfOutputPath, bytes: Buffer.byteLength(rendered.latex), pdfBytes: compiled?.bytes, pdfSha256: compiled?.sha256, renderer: rendered.renderer, requiredPackages: rendered.requiredPackages }, null, 2));
+}
+
+async function renderPng(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const scenePath = options.positionals[0] ?? "examples/geometry-basics-scene.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/geometry-basics.png");
+  const scene = normalizeScene(await readJsonFile(scenePath));
+  const rendered = renderSceneToPng(scene, pngOptions(options));
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, rendered.png);
+
+  console.log(JSON.stringify({
+    ok: true,
+    scenePath: resolve(scenePath),
+    outputPath,
+    sourceWidth: rendered.sourceWidth,
+    sourceHeight: rendered.sourceHeight,
+    width: rendered.width,
+    height: rendered.height,
+    background: rendered.background,
+    fit: rendered.fit,
+    fontPolicy: rendered.fontPolicy,
+    renderer: rendered.renderer,
+    bytes: rendered.png.length,
+    elementCount: scene.elements.length
+  }, null, 2));
+}
+
+async function renderRasterComposite(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const compositionPath = options.positionals[0] ?? "examples/raster-composition-basics.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/raster-composition-basics.png");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/raster-composition-basics.svg");
+  const rendered = composeRasterLayersToPng(await readJsonFile(compositionPath), pngOptions(options));
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(outputPath, rendered.png);
+  await writeFile(svgOutputPath, rendered.compositionSvg, "utf8");
+
+  console.log(JSON.stringify({
+    ok: true,
+    compositionPath: resolve(compositionPath),
+    outputPath,
+    svgOutputPath,
+    width: rendered.width,
+    height: rendered.height,
+    layerCount: rendered.layerCount,
+    visibleLayerCount: rendered.visibleLayerCount,
+    background: rendered.background,
+    renderer: rendered.renderer,
+    bytes: rendered.png.length
+  }, null, 2));
+}
+
+async function constructBooleanGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/polygon-boolean-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/polygon-boolean-result.json");
+  const result = constructPolygonBoolean(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function flattenCurveGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/bezier-flatten-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/bezier-flatten-result.json");
+  const result = flattenBezierPath(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function expandStrokeGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/stroke-expansion-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/stroke-expansion-result.json");
+  const result = expandStroke(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function placePathMarkerGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/path-marker-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/path-marker-result.json");
+  const result = placePathMarkers(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function generateScientificPlot(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/scientific-plot.json";
+  const resultOutputPath = resolve(optionValue(options, "result-output") ?? "var/exports/scientific-plot.result.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-plot.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-plot.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/scientific-plot.png");
+  const result = compileScientificPlot(await readJsonFile(requestPath));
+  const svg = renderSceneToSvg(result.scene);
+  const png = renderSceneToPng(result.scene, pngOptions(options, "png-"));
+  for (const path of [resultOutputPath, sceneOutputPath, svgOutputPath, pngOutputPath]) await mkdir(dirname(path), { recursive: true });
+  await writeFile(resultOutputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, `${JSON.stringify(result.scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), resultOutputPath, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, seriesCount: result.seriesSummaries.length, pointCount: result.seriesSummaries.reduce((sum, series) => sum + series.pointCount, 0), engine: result.engine }, null, 2));
+}
+
+async function generateScientificPgfplots(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/scientific-plot.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/scientific-plot.tex");
+  const pdfOutputValue = optionValue(options, "pdf-output");
+  const pdfOutputPath = pdfOutputValue === undefined ? undefined : resolve(pdfOutputValue);
+  const rendered = renderScientificPlotToPgfplots(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, rendered.latex, "utf8");
+  const compiled = pdfOutputPath === undefined ? undefined : await compileLatexWithTectonic(rendered.latex, { enginePath: resolveTectonicPath(options) });
+  if (compiled && pdfOutputPath) {
+    await mkdir(dirname(pdfOutputPath), { recursive: true });
+    await writeFile(pdfOutputPath, compiled.pdf);
+  }
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, pdfOutputPath, bytes: Buffer.byteLength(rendered.latex), pdfBytes: compiled?.bytes, pdfSha256: compiled?.sha256, renderer: rendered.renderer, compat: rendered.compat, seriesCount: rendered.plot.seriesSummaries.length }, null, 2));
+}
+
+async function generateUnifiedScientificImage(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/scientific-image-story.json";
+  const manifestOutputPath = resolve(optionValue(options, "manifest-output") ?? "var/exports/scientific-image.manifest.json");
+  const intermediateOutputPath = resolve(optionValue(options, "intermediate-output") ?? "var/exports/scientific-image.intermediate.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-image.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-image.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/scientific-image.png");
+  const latexOutputPath = resolve(optionValue(options, "latex-output") ?? "var/exports/scientific-image.tex");
+  const latexPdfOutputValue = optionValue(options, "latex-pdf-output");
+  const latexPdfOutputPath = latexPdfOutputValue === undefined ? undefined : resolve(latexPdfOutputValue);
+  const generated = generateScientificImage(await readJsonFile(requestPath));
+  const compiledLatex = latexPdfOutputPath === undefined
+    ? undefined
+    : await compileLatexWithTectonic(generated.latex, { enginePath: resolveTectonicPath(options) });
+  for (const path of [manifestOutputPath, intermediateOutputPath, sceneOutputPath, svgOutputPath, pngOutputPath, latexOutputPath, latexPdfOutputPath]) {
+    if (path !== undefined) await mkdir(dirname(path), { recursive: true });
+  }
+  await writeFile(manifestOutputPath, `${JSON.stringify(generated.manifest, null, 2)}\n`, "utf8");
+  await writeFile(intermediateOutputPath, `${JSON.stringify(generated.intermediate, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, generated.sceneJson, "utf8");
+  await writeFile(svgOutputPath, generated.svg, "utf8");
+  await writeFile(latexOutputPath, generated.latex, "utf8");
+  await writeFile(pngOutputPath, generated.png.png);
+  if (compiledLatex && latexPdfOutputPath) await writeFile(latexPdfOutputPath, compiledLatex.pdf);
+  console.log(JSON.stringify({
+    ok: true,
+    requestPath: resolve(requestPath),
+    manifestOutputPath,
+    intermediateOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    latexOutputPath,
+    latexPdfOutputPath,
+    pngOutputPath,
+    latexPdfBytes: compiledLatex?.bytes,
+    latexPdfSha256: compiledLatex?.sha256,
+    ...generated.manifest
+  }, null, 2));
+}
+
+async function renderBooleanGeometryBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/polygon-boolean-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/polygon-boolean-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/polygon-boolean-basics.png");
+  const scene = normalizeScene(composeBooleanGeometryBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({
+    ok: true,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    width: png.width,
+    height: png.height,
+    bytes: png.png.length,
+    elementCount: scene.elements.length,
+    semanticObjectCount: scene.semantics?.objects.length ?? 0,
+    engine: "polygon-clipping-0.15.7"
+  }, null, 2));
+}
+
+async function renderCurveGeometryBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/curve-geometry-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/curve-geometry-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/curve-geometry-basics.png");
+  const scene = normalizeScene(composeCurveGeometryBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({
+    ok: true,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    width: png.width,
+    height: png.height,
+    bytes: png.png.length,
+    elementCount: scene.elements.length,
+    semanticObjectCount: scene.semantics?.objects.length ?? 0,
+    geometry: "adaptive-cubic-bezier-flattening"
+  }, null, 2));
+}
+
+async function renderStrokeExpansionBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/stroke-expansion-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/stroke-expansion-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/stroke-expansion-basics.png");
+  const scene = normalizeScene(composeStrokeExpansionBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, elementCount: scene.elements.length, semanticObjectCount: scene.semantics?.objects.length ?? 0, geometry: "software-stroke-expansion.v1" }, null, 2));
+}
+
+async function renderPathMarkerBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/path-marker-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/path-marker-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/path-marker-basics.png");
+  const scene = normalizeScene(composePathMarkerBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, elementCount: scene.elements.length, semanticObjectCount: scene.semantics?.objects.length ?? 0, geometry: "software-path-markers.v1" }, null, 2));
+}
+
+async function renderVectorPaintBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/vector-paint-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/vector-paint-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/vector-paint-basics.png");
+  const scene = normalizeScene(composeVectorPaintBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, elementCount: scene.elements.length, paintCount: scene.paints?.length ?? 0, semanticObjectCount: scene.semantics?.objects.length ?? 0, renderer: "software-vector-paints.v1" }, null, 2));
+}
+
+async function composeScientific(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const specPath = options.positionals[0] ?? "examples/scientific-symbol-composition.json";
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-symbol-composition.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-symbol-composition.svg");
+  const scene = composeScientificDiagram(await readJsonFile(specPath));
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        specPath: resolve(specPath),
+        sceneOutputPath,
+        svgOutputPath,
+        symbolCount: scene.semantics?.objects.length ?? 0,
+        relationshipCount: scene.semantics?.relationships?.length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function generateScientificFigure(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const specPath = options.positionals[0] ?? "examples/scientific-figure-spec.json";
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-figure.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-figure.svg");
+  const scene = compileScientificFigure(await readJsonFile(specPath));
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(JSON.stringify({
+    ok: true,
+    specPath: resolve(specPath),
+    sceneOutputPath,
+    svgOutputPath,
+    objectCount: scene.semantics?.objects.length ?? 0,
+    relationshipCount: scene.semantics?.relationships?.length ?? 0,
+    elementCount: scene.elements.length
+  }, null, 2));
+}
+
+async function generateScientificStory(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const storyPath = options.positionals[0] ?? "examples/scientific-story.json";
+  const figureOutputPath = resolve(optionValue(options, "figure-output") ?? "var/exports/scientific-story.figure.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-story.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-story.svg");
+  const figure = planScientificStory(await readJsonFile(storyPath));
+  const scene = compileScientificFigure(figure);
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(figureOutputPath), { recursive: true });
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(figureOutputPath, `${JSON.stringify(figure, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(JSON.stringify({
+    ok: true,
+    storyPath: resolve(storyPath),
+    figureOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    objectCount: scene.semantics?.objects.length ?? 0,
+    relationshipCount: scene.semantics?.relationships?.length ?? 0,
+    elementCount: scene.elements.length
+  }, null, 2));
+}
+
+async function generateScientificText(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const textPath = options.positionals[0] ?? "examples/scientific-controlled-text.txt";
+  const parseOutputPath = resolve(optionValue(options, "parse-output") ?? "var/exports/scientific-controlled-text.parse.json");
+  const figureOutputPath = resolve(optionValue(options, "figure-output") ?? "var/exports/scientific-controlled-text.figure.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-controlled-text.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-controlled-text.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/scientific-controlled-text.png");
+  const parsed = parseScientificText(await readFile(textPath, "utf8"));
+  const figure = planScientificStory(parsed.story);
+  const scene = compileScientificFigure(figure);
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, {
+    ...pngOptions(options, "png-"),
+    background: optionValue(options, "png-background") ?? "#FFFFFF"
+  });
+
+  await mkdir(dirname(parseOutputPath), { recursive: true });
+  await mkdir(dirname(figureOutputPath), { recursive: true });
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(parseOutputPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  await writeFile(figureOutputPath, `${JSON.stringify(figure, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+
+  console.log(JSON.stringify({
+    ok: true,
+    grammar: parsed.grammar,
+    textPath: resolve(textPath),
+    parseOutputPath,
+    figureOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    statementCount: parsed.statements.length,
+    objectCount: scene.semantics?.objects.length ?? 0,
+    relationshipCount: scene.semantics?.relationships?.length ?? 0,
+    elementCount: scene.elements.length,
+    pngWidth: png.width,
+    pngHeight: png.height,
+    pngBytes: png.png.length,
+    pngRenderer: png.renderer
+  }, null, 2));
+}
+
+async function renderTransformBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/transform-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/transform-basics.svg");
+  const scene = composeTransformBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, elementCount: scene.elements.length }, null, 2));
+}
+
+async function renderCompositionBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/composition-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/composition-basics.svg");
+  const scene = composeCompositionBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      { ok: true, sceneOutputPath, svgOutputPath, groupCount: scene.groups?.length ?? 0, elementCount: scene.elements.length },
+      null,
+      2
+    )
+  );
+}
+
+async function renderConstraintBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/constraint-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/constraint-basics.svg");
+  const scene = composeConstraintBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        sceneOutputPath,
+        svgOutputPath,
+        objectCount: scene.semantics?.objects.length ?? 0,
+        relationshipCount: scene.semantics?.relationships?.length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function renderRoutingBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/routing-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/routing-basics.svg");
+  const scene = composeRoutingBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        sceneOutputPath,
+        svgOutputPath,
+        routeCount: scene.semantics?.relationships?.length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function renderLabelStyleBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/label-style-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/label-style-basics.svg");
+  const scene = composeLabelStyleBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        sceneOutputPath,
+        svgOutputPath,
+        labeledObjectCount: scene.semantics?.objects.filter((object) => object.properties?.labelPosition !== undefined).length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
 }
 
 async function makeExport(args: string[]): Promise<void> {
@@ -1130,6 +1797,22 @@ function optionValue(options: ParsedOptions, key: string): string | undefined {
   return options.values.get(key);
 }
 
+function pngOptions(options: ParsedOptions, prefix = ""): PngRenderOptions {
+  const numeric = (name: string): number | undefined => {
+    const value = optionValue(options, `${prefix}${name}`);
+    if (value === undefined) return undefined;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) throw new ValidationError(`${prefix}${name} must be a finite number`);
+    return parsed;
+  };
+  return {
+    ...(numeric("width") === undefined ? {} : { width: numeric("width") }),
+    ...(numeric("height") === undefined ? {} : { height: numeric("height") }),
+    ...(numeric("scale") === undefined ? {} : { scale: numeric("scale") }),
+    ...(optionValue(options, `${prefix}background`) === undefined ? {} : { background: optionValue(options, `${prefix}background`) })
+  };
+}
+
 function flagValue(options: ParsedOptions, key: string): boolean {
   const value = options.values.get(key);
   if (value !== undefined) {
@@ -1168,6 +1851,13 @@ function objectArg(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function resolveTectonicPath(options: ParsedOptions): string | undefined {
+  const configured = optionValue(options, "tectonic-bin");
+  if (configured !== undefined) return resolve(configured);
+  const local = resolve("var/tools/tectonic/tectonic");
+  return existsSync(local) ? local : undefined;
+}
+
 function sceneFromJson(value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return value;
@@ -1195,6 +1885,26 @@ Commands:
   mcp:serve
   jsx:ping [--message TEXT] [--root DIR]
   jsx:cartoon [SCENE_JSON_PATH] [--root DIR]
+  render:svg [SCENE_JSON_PATH] [--output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  render:tikz [SCENE_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
+  render:png [SCENE_JSON_PATH] [--output PNG_PATH] [--width N | --height N | --scale N] [--background transparent|#RRGGBB|#RRGGBBAA]
+  render:composite [COMPOSITION_JSON_PATH] [--output PNG_PATH] [--svg-output SVG_PATH] [--width N | --height N | --scale N] [--background transparent|#RRGGBB|#RRGGBBAA]
+  scientific:compose [SPEC_JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH]
+  scientific:generate [SPEC_JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH]
+  scientific:story [STORY_JSON_PATH] [--figure-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH]
+  scientific:text [TEXT_PATH] [--parse-output JSON_PATH] [--figure-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  scientific:plot [PLOT_JSON_PATH] [--result-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  scientific:pgfplots [PLOT_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
+  scientific:image [REQUEST_JSON_PATH] [--manifest-output JSON_PATH] [--intermediate-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--latex-output TEX_PATH] [--latex-pdf-output PDF_PATH] [--png-output PNG_PATH] [--tectonic-bin PATH]
+  geometry:boolean [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:flatten-curve [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:expand-stroke [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:path-markers [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:boolean-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  geometry:curve-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  geometry:stroke-expansion-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  geometry:path-marker-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  render:paint-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
   jsx:export --output PATH [--format pdf|svg|png|jpg] [--root DIR]
   photoshop:detect [--platform auto|windows|wsl] [--crash-lookback-minutes N] [--timeout-ms N]
   chatgpt:detect [--auracall-command PATH] [--timeout-seconds N] [--operation-timeout-seconds N] [--live] [--no-prune]

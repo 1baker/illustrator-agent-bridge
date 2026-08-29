@@ -117,3 +117,75 @@ test("generates an Illustrator Photoshop reference placement JSX job", () => {
   assert.match(jsx, /svg_rebuilt_reference/);
   assert.match(jsx, /photoshop-visible-mouse-stroke/);
 });
+
+test("writes stable scientific identity into Illustrator page-item notes", () => {
+  const jsx = generateJsx(
+    {
+      kind: "cartoon_scene",
+      scene: {
+        elements: [
+          {
+            id: "cell-membrane",
+            type: "ellipse",
+            name: "cell membrane",
+            x: 10,
+            y: 10,
+            width: 80,
+            height: 80
+          }
+        ],
+        semantics: {
+          objects: [{ id: "cell-1", kind: "cell", elementIds: ["cell-membrane"] }]
+        }
+      }
+    },
+    { id: "job-semantic", resultPath: "/tmp/illustrator-agent/result.json" }
+  );
+
+  assert.match(jsx, /item0\.note = /);
+  assert.match(jsx, /scientific-image-generator\.element-semantics\.v1/);
+  assert.match(jsx, /cell-membrane/);
+  assert.match(jsx, /cell-1/);
+});
+
+test("fails visibly instead of dropping unsupported core composition semantics", () => {
+  assert.throws(
+    () =>
+      generateJsx(
+        {
+          kind: "cartoon_scene",
+          scene: {
+            elements: [{ id: "particle", type: "ellipse", x: 10, y: 10, width: 20, height: 20, groupId: "cell" }],
+            groups: [{ id: "cell", clip: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } }]
+          }
+        },
+        { id: "grouped-scene", resultPath: "/tmp/grouped-scene.json" }
+      ),
+    /does not yet support groups, clipping, z-order, or visibility/
+  );
+});
+
+test("preserves advanced stroke styling and rejects unsupported compound paths", () => {
+  const strokeJsx = generateJsx(
+    {
+      kind: "cartoon_scene",
+      scene: {
+        elements: [{ type: "line", x: 10, y: 10, x2: 100, y2: 10, style: { stroke: "#2563EB", strokeWidth: 6, lineCap: "round", lineJoin: "bevel", dashArray: [12, 6], dashOffset: 3, miterLimit: 8 } }]
+      }
+    },
+    { id: "advanced-stroke", resultPath: "/tmp/advanced-stroke.json" }
+  );
+  assert.match(strokeJsx, /StrokeCap\.ROUNDENDCAP/);
+  assert.match(strokeJsx, /StrokeJoin\.BEVELENDJOIN/);
+  assert.match(strokeJsx, /\[12, 6\], 3, 8/);
+  assert.throws(
+    () => generateJsx(
+      {
+        kind: "cartoon_scene",
+        scene: { elements: [{ type: "compound_path", x: 0, y: 0, subpaths: [{ points: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }] }] }] }
+      },
+      { id: "compound", resultPath: "/tmp/compound.json" }
+    ),
+    /software-native SVG or PNG/
+  );
+});

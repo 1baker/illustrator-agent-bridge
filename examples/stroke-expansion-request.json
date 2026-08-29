@@ -1,0 +1,30 @@
+{
+  "tolerance": 0.5,
+  "source": {
+    "type": "path",
+    "id": "proposed-transport-centerline",
+    "name": "proposed transport path",
+    "x": 0,
+    "y": 0,
+    "closed": false,
+    "points": [
+      { "x": 60, "y": 180, "rightX": 130, "rightY": 40 },
+      { "x": 230, "y": 105, "leftX": 170, "leftY": 55, "rightX": 285, "rightY": 155 },
+      { "x": 390, "y": 120, "leftX": 335, "leftY": 180 }
+    ],
+    "style": {
+      "fill": null,
+      "stroke": "#2563EB",
+      "strokeWidth": 18,
+      "lineCap": "round",
+      "lineJoin": "round",
+      "dashArray": [42, 18],
+      "dashOffset": 7
+    }
+  },
+  "output": {
+    "id": "proposed-transport-outline",
+    "name": "expanded proposed transport region",
+    "style": { "fill": "#93C5FD", "stroke": "#1D4ED8", "strokeWidth": 1 }
+  }
+}

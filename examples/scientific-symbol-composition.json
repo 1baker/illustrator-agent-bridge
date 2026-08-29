@@ -1,0 +1,54 @@
+{
+  "document": {
+    "title": "Reusable Scientific Symbols: Ligand-Receptor Binding",
+    "width": 1100,
+    "height": 650,
+    "colorMode": "RGB"
+  },
+  "symbols": [
+    {
+      "id": "cell-1",
+      "kind": "cell",
+      "x": 70,
+      "y": 150,
+      "width": 430,
+      "height": 340,
+      "label": "target cell"
+    },
+    {
+      "id": "receptor-1",
+      "kind": "membrane_receptor",
+      "width": 170,
+      "height": 140,
+      "label": "membrane receptor",
+      "anchor": {
+        "targetObjectId": "cell-1",
+        "targetPort": "right",
+        "ownPort": "left",
+        "gap": -12
+      }
+    },
+    {
+      "id": "ligand-1",
+      "kind": "ligand",
+      "width": 76,
+      "height": 76,
+      "label": "ligand",
+      "anchor": {
+        "targetObjectId": "receptor-1",
+        "targetPort": "right",
+        "ownPort": "left",
+        "gap": 230
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "binding-1",
+      "sourceObjectId": "ligand-1",
+      "predicate": "binds_to",
+      "targetObjectId": "receptor-1",
+      "label": "binds to"
+    }
+  ]
+}

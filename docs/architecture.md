@@ -26,6 +26,9 @@
 8. Semantic search layer
    Planned retrieval layer for visual references, object semantics, style guides, and publication constraints. Retrieval should feed the planning step before commands are sent to Illustrator.
 
+9. Software-native geometry compiler
+   Owns validated anchors, cubic Bézier handles, explicit-tolerance curve flattening, stroke-to-filled-outline expansion, polygon set operations, compound paths, semantic scene identity, SVG output, and derived PNG output. Adobe applications are optional adapters after this layer.
+
 ## Command Flow
 
 Native MCP:

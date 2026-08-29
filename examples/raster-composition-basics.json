@@ -1,0 +1,64 @@
+{
+  "document": {
+    "width": 800,
+    "height": 500,
+    "title": "Software-native raster composition"
+  },
+  "layers": [
+    {
+      "id": "background",
+      "name": "Background",
+      "scene": {
+        "document": { "width": 800, "height": 500 },
+        "elements": [
+          { "id": "canvas", "type": "rect", "x": 0, "y": 0, "width": 800, "height": 500, "style": { "fill": "#F8FAFC", "stroke": null } },
+          { "id": "title", "type": "text", "x": 38, "y": 28, "text": "Scientific layers without Photoshop", "size": 29, "style": { "fill": "#0F172A", "stroke": null } },
+          { "id": "subtitle", "type": "text", "x": 40, "y": 68, "text": "vector scenes -> ordered layers -> mask + opacity + blend -> PNG", "size": 16, "style": { "fill": "#475569", "stroke": null } }
+        ]
+      }
+    },
+    {
+      "id": "cell-structure",
+      "name": "Cell structure",
+      "scene": {
+        "document": { "width": 800, "height": 500 },
+        "elements": [
+          { "id": "cell-shadow", "type": "ellipse", "x": 128, "y": 138, "width": 544, "height": 276, "style": { "fill": "#CBD5E1", "stroke": null, "opacity": 55 } },
+          { "id": "cell-body", "type": "ellipse", "x": 120, "y": 125, "width": 544, "height": 276, "style": { "fill": "#CCFBF1", "stroke": "#0F766E", "strokeWidth": 6 } },
+          { "id": "nucleus", "type": "ellipse", "x": 306, "y": 191, "width": 172, "height": 144, "style": { "fill": "#DBEAFE", "stroke": "#2563EB", "strokeWidth": 5 } },
+          { "id": "nucleus-ring", "type": "ellipse", "x": 336, "y": 216, "width": 112, "height": 94, "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 3 } }
+        ]
+      }
+    },
+    {
+      "id": "measurement-overlay",
+      "name": "Masked measurement overlay",
+      "opacity": 42,
+      "blendMode": "multiply",
+      "mask": { "type": "ellipse", "x": 120, "y": 125, "width": 544, "height": 276 },
+      "scene": {
+        "document": { "width": 800, "height": 500 },
+        "elements": [
+          { "id": "band-1", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 60, "y": 150 }, { "x": 110, "y": 120 }, { "x": 550, "y": 410 }, { "x": 500, "y": 440 }], "style": { "fill": "#C026D3", "stroke": null } },
+          { "id": "band-2", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 185, "y": 100 }, { "x": 235, "y": 70 }, { "x": 675, "y": 360 }, { "x": 625, "y": 390 }], "style": { "fill": "#C026D3", "stroke": null } },
+          { "id": "band-3", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 315, "y": 70 }, { "x": 365, "y": 40 }, { "x": 785, "y": 320 }, { "x": 735, "y": 350 }], "style": { "fill": "#C026D3", "stroke": null } }
+        ]
+      }
+    },
+    {
+      "id": "annotations",
+      "name": "Annotations",
+      "scene": {
+        "document": { "width": 800, "height": 500 },
+        "elements": [
+          { "id": "cell-label-line", "type": "line", "x": 155, "y": 385, "x2": 96, "y2": 449, "style": { "stroke": "#334155", "strokeWidth": 2 } },
+          { "id": "cell-label", "type": "text", "x": 40, "y": 450, "text": "cell boundary", "size": 17, "style": { "fill": "#334155", "stroke": null } },
+          { "id": "nucleus-label-line", "type": "line", "x": 458, "y": 213, "x2": 530, "y2": 145, "style": { "stroke": "#334155", "strokeWidth": 2 } },
+          { "id": "nucleus-label", "type": "text", "x": 534, "y": 126, "text": "nucleus", "size": 17, "style": { "fill": "#334155", "stroke": null } },
+          { "id": "overlay-label-line", "type": "line", "x": 575, "y": 342, "x2": 690, "y2": 431, "style": { "stroke": "#A21CAF", "strokeWidth": 2 } },
+          { "id": "overlay-label", "type": "text", "x": 616, "y": 442, "text": "masked overlay", "size": 17, "style": { "fill": "#86198F", "stroke": null } }
+        ]
+      }
+    }
+  ]
+}

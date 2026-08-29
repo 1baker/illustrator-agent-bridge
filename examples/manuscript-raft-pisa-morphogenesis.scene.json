@@ -1,0 +1,169 @@
+{
+  "document": {
+    "title": "Time-resolved RAFT-PISA morphogenesis",
+    "width": 1400,
+    "height": 880,
+    "colorMode": "RGB"
+  },
+  "groups": [
+    { "id": "aqueous-field", "name": "Aqueous reaction field", "zIndex": -10, "opacity": 70 },
+    { "id": "monomer-reservoir", "name": "Dispersed monomer reservoir", "zIndex": -5, "opacity": 35 },
+    { "id": "saxs-rays", "name": "Scattered X-ray paths", "zIndex": 5, "opacity": 60 }
+  ],
+  "elements": [
+    { "id": "background", "type": "rect", "x": 0, "y": 0, "width": 1400, "height": 880, "zIndex": -100, "style": { "fill": "#FFFFFF", "stroke": null } },
+    { "id": "title", "type": "text", "x": 52, "y": 24, "text": "Time-resolved morphogenesis during aqueous RAFT-PISA", "size": 34, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "subtitle", "type": "text", "x": 52, "y": 70, "text": "Evidence-grounded conceptual schematic; representative pathway, formulation dependent, not to scale", "size": 18, "style": { "fill": "#475569", "stroke": null } },
+
+    { "id": "panel-a", "type": "rect", "x": 42, "y": 112, "width": 1316, "height": 430, "style": { "fill": "#F8FAFC", "stroke": "#CBD5E1", "strokeWidth": 2 } },
+    { "id": "panel-a-label", "type": "text", "x": 60, "y": 128, "text": "A   Core-block growth drives a representative morphology sequence", "size": 22, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "water-field", "type": "rect", "x": 60, "y": 170, "width": 1280, "height": 335, "groupId": "aqueous-field", "style": { "fill": "#DBEAFE", "stroke": null } },
+    { "id": "water-label", "type": "text", "x": 75, "y": 184, "text": "aqueous continuous phase", "size": 16, "style": { "fill": "#0369A1", "stroke": null } },
+
+    { "id": "reaction-vessel", "type": "rect", "x": 78, "y": 226, "width": 210, "height": 210, "style": { "fill": "#EFF6FF", "stroke": "#475569", "strokeWidth": 3 } },
+    { "id": "reaction-vessel-top", "type": "line", "x": 78, "y": 226, "x2": 288, "y2": 226, "style": { "stroke": "#475569", "strokeWidth": 8, "lineCap": "round" } },
+    { "id": "monomer-drop-1", "type": "ellipse", "x": 105, "y": 255, "width": 58, "height": 58, "groupId": "monomer-reservoir", "style": { "fill": "#A78BFA", "stroke": "#6D28D9", "strokeWidth": 3 } },
+    { "id": "monomer-drop-2", "type": "ellipse", "x": 205, "y": 345, "width": 44, "height": 44, "groupId": "monomer-reservoir", "style": { "fill": "#A78BFA", "stroke": "#6D28D9", "strokeWidth": 3 } },
+    { "id": "monomer-label", "type": "text", "x": 118, "y": 274, "text": "M", "size": 18, "style": { "fill": "#4C1D95", "stroke": null } },
+    { "id": "macro-chain-1", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 110, "y": 370, "rightX": 135, "rightY": 330 }, { "x": 180, "y": 370, "leftX": 155, "leftY": 410 }], "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 7, "lineCap": "round" } },
+    { "id": "macro-chain-2", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 175, "y": 290, "rightX": 195, "rightY": 260 }, { "x": 245, "y": 300, "leftX": 220, "leftY": 335 }], "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 7, "lineCap": "round" } },
+    { "id": "cta-end-1", "type": "ellipse", "x": 176, "y": 363, "width": 15, "height": 15, "style": { "fill": "#F59E0B", "stroke": "#B45309", "strokeWidth": 2 } },
+    { "id": "cta-end-2", "type": "ellipse", "x": 240, "y": 293, "width": 15, "height": 15, "style": { "fill": "#F59E0B", "stroke": "#B45309", "strokeWidth": 2 } },
+    { "id": "reaction-label", "type": "text", "x": 92, "y": 450, "text": "macro-CTA + monomer", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "reaction-condition", "type": "text", "x": 110, "y": 477, "text": "radical source, heat", "size": 16, "style": { "fill": "#64748B", "stroke": null } },
+
+    { "id": "arrow-1-line", "type": "line", "x": 305, "y": 334, "x2": 365, "y2": 334, "style": { "stroke": "#64748B", "strokeWidth": 3, "lineCap": "round" } },
+    { "id": "arrow-1-head", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 365, "y": 334 }, { "x": 350, "y": 325 }, { "x": 350, "y": 343 }], "style": { "fill": "#64748B", "stroke": null } },
+
+    { "id": "unimer-chain-a", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 390, "y": 300, "rightX": 405, "rightY": 270 }, { "x": 445, "y": 305, "leftX": 425, "leftY": 335 }], "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 6, "lineCap": "round" } },
+    { "id": "unimer-core-a", "type": "line", "x": 445, "y": 305, "x2": 475, "y2": 320, "style": { "stroke": "#F59E0B", "strokeWidth": 7, "lineCap": "round" } },
+    { "id": "unimer-chain-b", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 400, "y": 360, "rightX": 420, "rightY": 330 }, { "x": 455, "y": 370, "leftX": 435, "leftY": 395 }], "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 6, "lineCap": "round" } },
+    { "id": "unimer-core-b", "type": "line", "x": 455, "y": 370, "x2": 485, "y2": 390, "style": { "stroke": "#F59E0B", "strokeWidth": 7, "lineCap": "round" } },
+    { "id": "unimer-label", "type": "text", "x": 375, "y": 435, "text": "soluble chains", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+
+    { "id": "arrow-2-line", "type": "line", "x": 495, "y": 334, "x2": 550, "y2": 334, "style": { "stroke": "#64748B", "strokeWidth": 3, "lineCap": "round" } },
+    { "id": "arrow-2-head", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 550, "y": 334 }, { "x": 535, "y": 325 }, { "x": 535, "y": 343 }], "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "nucleus-shell", "type": "ellipse", "x": 565, "y": 278, "width": 112, "height": 112, "style": { "fill": "#93C5FD", "stroke": "#2563EB", "strokeWidth": 3, "opacity": 35 } },
+    { "id": "nucleus-core-1", "type": "ellipse", "x": 600, "y": 311, "width": 42, "height": 42, "style": { "fill": "#F59E0B", "stroke": "#B45309", "strokeWidth": 3, "opacity": 75 } },
+    { "id": "nucleus-dot-1", "type": "ellipse", "x": 584, "y": 297, "width": 13, "height": 13, "style": { "fill": "#2563EB", "stroke": null } },
+    { "id": "nucleus-dot-2", "type": "ellipse", "x": 650, "y": 304, "width": 13, "height": 13, "style": { "fill": "#2563EB", "stroke": null } },
+    { "id": "nucleus-dot-3", "type": "ellipse", "x": 614, "y": 367, "width": 13, "height": 13, "style": { "fill": "#2563EB", "stroke": null } },
+    { "id": "nucleus-label", "type": "text", "x": 558, "y": 435, "text": "micellar nucleus", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+
+    { "id": "arrow-3-line", "type": "line", "x": 685, "y": 334, "x2": 735, "y2": 334, "style": { "stroke": "#64748B", "strokeWidth": 3, "lineCap": "round" } },
+    { "id": "arrow-3-head", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 735, "y": 334 }, { "x": 720, "y": 325 }, { "x": 720, "y": 343 }], "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "sphere-shell", "type": "ellipse", "x": 750, "y": 270, "width": 128, "height": 128, "style": { "fill": "#BFDBFE", "stroke": "#2563EB", "strokeWidth": 4, "opacity": 50 } },
+    { "id": "sphere-core", "type": "ellipse", "x": 784, "y": 304, "width": 60, "height": 60, "style": { "fill": "#F59E0B", "stroke": "#B45309", "strokeWidth": 3, "opacity": 75 } },
+    { "id": "sphere-label", "type": "text", "x": 787, "y": 435, "text": "sphere", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+
+    { "id": "arrow-4-line", "type": "line", "x": 885, "y": 334, "x2": 930, "y2": 334, "style": { "stroke": "#64748B", "strokeWidth": 3, "lineCap": "round" } },
+    { "id": "arrow-4-head", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 930, "y": 334 }, { "x": 915, "y": 325 }, { "x": 915, "y": 343 }], "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "worm-halo", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 950, "y": 375, "rightX": 980, "rightY": 250 }, { "x": 1055, "y": 330, "leftX": 1020, "leftY": 430 }], "style": { "fill": null, "stroke": "#93C5FD", "strokeWidth": 48, "lineCap": "round", "opacity": 45 } },
+    { "id": "worm-core", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 950, "y": 375, "rightX": 980, "rightY": 250 }, { "x": 1055, "y": 330, "leftX": 1020, "leftY": 430 }], "style": { "fill": null, "stroke": "#F59E0B", "strokeWidth": 28, "lineCap": "round", "opacity": 75 } },
+    { "id": "worm-branch-halo", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 1007, "y": 331, "rightX": 1018, "rightY": 315 }, { "x": 1038, "y": 286, "leftX": 1030, "leftY": 300 }], "style": { "fill": null, "stroke": "#93C5FD", "strokeWidth": 36, "lineCap": "round", "opacity": 45 } },
+    { "id": "worm-branch-core", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 1007, "y": 331, "rightX": 1018, "rightY": 315 }, { "x": 1038, "y": 286, "leftX": 1030, "leftY": 300 }], "style": { "fill": null, "stroke": "#F59E0B", "strokeWidth": 20, "lineCap": "round", "opacity": 75 } },
+    { "id": "worm-label", "type": "text", "x": 942, "y": 435, "text": "worm / branched worm", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+
+    { "id": "arrow-5-line", "type": "line", "x": 1070, "y": 334, "x2": 1110, "y2": 334, "style": { "stroke": "#64748B", "strokeWidth": 3, "lineCap": "round" } },
+    { "id": "arrow-5-head", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 1110, "y": 334 }, { "x": 1095, "y": 325 }, { "x": 1095, "y": 343 }], "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "vesicle", "type": "compound_path", "x": 0, "y": 0, "fillRule": "evenodd", "subpaths": [
+      { "closed": true, "points": [
+        { "x": 1295, "y": 334, "rightX": 1295, "rightY": 295.34, "leftX": 1295, "leftY": 372.66 },
+        { "x": 1225, "y": 264, "rightX": 1186.34, "rightY": 264, "leftX": 1263.66, "leftY": 264 },
+        { "x": 1155, "y": 334, "rightX": 1155, "rightY": 372.66, "leftX": 1155, "leftY": 295.34 },
+        { "x": 1225, "y": 404, "rightX": 1263.66, "rightY": 404, "leftX": 1186.34, "leftY": 404 }
+      ] },
+      { "closed": true, "points": [
+        { "x": 1267, "y": 334, "rightX": 1267, "rightY": 357.20, "leftX": 1267, "leftY": 310.80 },
+        { "x": 1225, "y": 376, "rightX": 1201.80, "rightY": 376, "leftX": 1248.20, "leftY": 376 },
+        { "x": 1183, "y": 334, "rightX": 1183, "rightY": 310.80, "leftX": 1183, "leftY": 357.20 },
+        { "x": 1225, "y": 292, "rightX": 1248.20, "rightY": 292, "leftX": 1201.80, "leftY": 292 }
+      ] }
+    ], "style": { "fill": "#F59E0B", "stroke": "#B45309", "strokeWidth": 3, "opacity": 72 } },
+    { "id": "vesicle-outer-corona", "type": "ellipse", "x": 1149, "y": 258, "width": 152, "height": 152, "style": { "fill": null, "stroke": "#60A5FA", "strokeWidth": 8, "opacity": 55 } },
+    { "id": "vesicle-inner-corona", "type": "ellipse", "x": 1179, "y": 288, "width": 92, "height": 92, "style": { "fill": null, "stroke": "#60A5FA", "strokeWidth": 7, "opacity": 55 } },
+    { "id": "vesicle-lumen-label", "type": "text", "x": 1193, "y": 322, "text": "lumen", "size": 16, "style": { "fill": "#475569", "stroke": null } },
+    { "id": "vesicle-label", "type": "text", "x": 1190, "y": 435, "text": "vesicle", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "growth-axis", "type": "line", "x": 385, "y": 485, "x2": 1280, "y2": 485, "style": { "stroke": "#64748B", "strokeWidth": 2, "lineCap": "round", "dashArray": [9, 7] } },
+    { "id": "growth-axis-label", "type": "text", "x": 635, "y": 500, "text": "increasing conversion and core-block degree of polymerization", "size": 16, "style": { "fill": "#64748B", "stroke": null } },
+
+    { "id": "panel-b", "type": "rect", "x": 42, "y": 565, "width": 1316, "height": 255, "style": { "fill": "#FAFAF9", "stroke": "#CBD5E1", "strokeWidth": 2 } },
+    { "id": "panel-b-label", "type": "text", "x": 60, "y": 581, "text": "B   Time-resolved SAXS links reaction progress to evolving nanoscale structure", "size": 22, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "xray-source", "type": "rect", "x": 82, "y": 655, "width": 105, "height": 70, "style": { "fill": "#FEF3C7", "stroke": "#D97706", "strokeWidth": 3 } },
+    { "id": "xray-source-label", "type": "text", "x": 97, "y": 668, "text": "X-ray", "size": 18, "style": { "fill": "#92400E", "stroke": null } },
+    { "id": "xray-source-label-2", "type": "text", "x": 97, "y": 696, "text": "source", "size": 16, "style": { "fill": "#92400E", "stroke": null } },
+    { "id": "incident-beam", "type": "line", "x": 190, "y": 690, "x2": 326, "y2": 690, "style": { "stroke": "#F59E0B", "strokeWidth": 6, "lineCap": "round" } },
+    { "id": "sample-cell", "type": "ellipse", "x": 326, "y": 647, "width": 86, "height": 86, "style": { "fill": "#DBEAFE", "stroke": "#2563EB", "strokeWidth": 3, "opacity": 75 } },
+    { "id": "sample-label", "type": "text", "x": 340, "y": 678, "text": "PISA", "size": 18, "style": { "fill": "#1E3A8A", "stroke": null } },
+    { "id": "scatter-ray-1", "type": "line", "x": 412, "y": 690, "x2": 510, "y2": 640, "groupId": "saxs-rays", "style": { "stroke": "#F59E0B", "strokeWidth": 3 } },
+    { "id": "scatter-ray-2", "type": "line", "x": 412, "y": 690, "x2": 510, "y2": 670, "groupId": "saxs-rays", "style": { "stroke": "#F59E0B", "strokeWidth": 3 } },
+    { "id": "scatter-ray-3", "type": "line", "x": 412, "y": 690, "x2": 510, "y2": 710, "groupId": "saxs-rays", "style": { "stroke": "#F59E0B", "strokeWidth": 3 } },
+    { "id": "scatter-ray-4", "type": "line", "x": 412, "y": 690, "x2": 510, "y2": 740, "groupId": "saxs-rays", "style": { "stroke": "#F59E0B", "strokeWidth": 3 } },
+    { "id": "detector", "type": "rect", "x": 510, "y": 625, "width": 42, "height": 130, "style": { "fill": "#E2E8F0", "stroke": "#475569", "strokeWidth": 3 } },
+    { "id": "detector-label", "type": "text", "x": 487, "y": 765, "text": "detector", "size": 16, "style": { "fill": "#475569", "stroke": null } },
+
+    { "id": "saxs-plot-note", "type": "text", "x": 635, "y": 606, "text": "schematic profiles (not fitted data)", "size": 13, "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "saxs-axis-x", "type": "line", "x": 615, "y": 744, "x2": 875, "y2": 744, "style": { "stroke": "#334155", "strokeWidth": 2 } },
+    { "id": "saxs-axis-y", "type": "line", "x": 615, "y": 630, "x2": 615, "y2": 744, "style": { "stroke": "#334155", "strokeWidth": 2 } },
+    { "id": "saxs-curve-early", "type": "path", "x": 0, "y": 0, "closed": false, "points": [
+      { "x": 625, "y": 648, "rightX": 650, "rightY": 646 },
+      { "x": 690, "y": 676, "leftX": 670, "leftY": 646, "rightX": 710, "rightY": 700 },
+      { "x": 755, "y": 660, "leftX": 735, "leftY": 690, "rightX": 790, "rightY": 640 },
+      { "x": 840, "y": 684, "leftX": 810, "leftY": 666 }
+    ], "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 3, "lineCap": "round", "lineJoin": "round", "opacity": 75 } },
+    { "id": "saxs-curve-middle", "type": "path", "x": 0, "y": 0, "closed": false, "points": [
+      { "x": 625, "y": 670, "rightX": 650, "rightY": 668 },
+      { "x": 690, "y": 705, "leftX": 670, "leftY": 669, "rightX": 710, "rightY": 728 },
+      { "x": 755, "y": 685, "leftX": 735, "leftY": 715, "rightX": 790, "rightY": 660 },
+      { "x": 840, "y": 715, "leftX": 810, "leftY": 692 }
+    ], "style": { "fill": null, "stroke": "#7C3AED", "strokeWidth": 3, "lineCap": "round", "lineJoin": "round", "opacity": 82 } },
+    { "id": "saxs-curve-late", "type": "path", "x": 0, "y": 0, "closed": false, "points": [
+      { "x": 625, "y": 694, "rightX": 650, "rightY": 691 },
+      { "x": 690, "y": 728, "leftX": 670, "leftY": 692, "rightX": 710, "rightY": 742 },
+      { "x": 755, "y": 704, "leftX": 735, "leftY": 732, "rightX": 790, "rightY": 687 },
+      { "x": 840, "y": 735, "leftX": 810, "leftY": 712 }
+    ], "style": { "fill": null, "stroke": "#EA580C", "strokeWidth": 3, "lineCap": "round", "lineJoin": "round", "opacity": 88 } },
+    { "id": "saxs-time-arrow", "type": "line", "x": 862, "y": 648, "x2": 862, "y2": 724, "style": { "stroke": "#64748B", "strokeWidth": 1 } },
+    { "id": "saxs-time-arrowhead", "type": "polygon", "x": 0, "y": 0, "points": [{ "x": 862, "y": 730 }, { "x": 857, "y": 720 }, { "x": 867, "y": 720 }], "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "saxs-time-early", "type": "text", "x": 868, "y": 638, "text": "early", "size": 11, "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "saxs-time-late", "type": "text", "x": 868, "y": 714, "text": "late", "size": 11, "style": { "fill": "#64748B", "stroke": null } },
+    { "id": "saxs-y-label", "type": "text", "x": 575, "y": 625, "text": "I(q)", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "saxs-x-label", "type": "text", "x": 866, "y": 752, "text": "q", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "saxs-trace-label", "type": "text", "x": 640, "y": 770, "text": "successive SAXS profiles", "size": 16, "style": { "fill": "#475569", "stroke": null } },
+
+    { "id": "readout-heading", "type": "text", "x": 900, "y": 625, "text": "Model-derived structural readouts", "size": 18, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "readout-1-dot", "type": "ellipse", "x": 905, "y": 662, "width": 12, "height": 12, "style": { "fill": "#2563EB", "stroke": null } },
+    { "id": "readout-1", "type": "text", "x": 928, "y": 655, "text": "particle diameter and aggregation number", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "readout-2-dot", "type": "ellipse", "x": 905, "y": 694, "width": 12, "height": 12, "style": { "fill": "#2563EB", "stroke": null } },
+    { "id": "readout-2", "type": "text", "x": 928, "y": 687, "text": "solvent fraction and inter-chain spacing", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "readout-3-dot", "type": "ellipse", "x": 905, "y": 726, "width": 12, "height": 12, "style": { "fill": "#2563EB", "stroke": null } },
+    { "id": "readout-3", "type": "text", "x": 928, "y": 719, "text": "vesicle diameter and membrane thickness", "size": 18, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "inward-growth", "type": "rect", "x": 900, "y": 755, "width": 405, "height": 43, "style": { "fill": "#FFF7ED", "stroke": "#EA580C", "strokeWidth": 2, "opacity": 75 } },
+    { "id": "inward-growth-text", "type": "text", "x": 916, "y": 765, "text": "Diameter + thickness trends support inward growth [2]", "size": 16, "style": { "fill": "#9A3412", "stroke": null } },
+
+    { "id": "legend-blue-line", "type": "line", "x": 62, "y": 842, "x2": 95, "y2": 842, "style": { "stroke": "#2563EB", "strokeWidth": 7, "lineCap": "round" } },
+    { "id": "legend-blue", "type": "text", "x": 105, "y": 832, "text": "hydrophilic stabilizer", "size": 18, "style": { "fill": "#475569", "stroke": null } },
+    { "id": "legend-orange-line", "type": "line", "x": 330, "y": 842, "x2": 363, "y2": 842, "style": { "stroke": "#F59E0B", "strokeWidth": 7, "lineCap": "round" } },
+    { "id": "legend-orange", "type": "text", "x": 375, "y": 832, "text": "growing core-forming block", "size": 18, "style": { "fill": "#475569", "stroke": null } },
+    { "id": "citations", "type": "text", "x": 715, "y": 832, "text": "Evidence sources: Brotherton et al. [1]; Czajka and Armes [2]", "size": 18, "style": { "fill": "#64748B", "stroke": null } }
+  ],
+  "semantics": {
+    "objects": [
+      { "id": "reaction-medium", "kind": "aqueous_raft_pisa_reaction", "label": "Aqueous RAFT-PISA reaction", "elementIds": ["reaction-vessel", "monomer-drop-1", "monomer-drop-2", "macro-chain-1", "macro-chain-2"] },
+      { "id": "soluble-unimers", "kind": "soluble_block_copolymer_chains", "label": "Soluble chains", "elementIds": ["unimer-chain-a", "unimer-core-a", "unimer-chain-b", "unimer-core-b"] },
+      { "id": "micellar-nucleus", "kind": "micellar_nucleus", "label": "Micellar nucleus", "elementIds": ["nucleus-shell", "nucleus-core-1"] },
+      { "id": "sphere-morphology", "kind": "pisa_sphere", "label": "Sphere", "elementIds": ["sphere-shell", "sphere-core"] },
+      { "id": "worm-morphology", "kind": "pisa_worm_intermediate", "label": "Worm or branched intermediate", "elementIds": ["worm-halo", "worm-core", "worm-branch-halo", "worm-branch-core"] },
+      { "id": "vesicle-morphology", "kind": "pisa_vesicle", "label": "Vesicle with transparent lumen and hydrated corona", "elementIds": ["vesicle", "vesicle-outer-corona", "vesicle-inner-corona", "vesicle-lumen-label"] },
+      { "id": "saxs-observation", "kind": "time_resolved_saxs", "label": "Time-resolved SAXS", "elementIds": ["xray-source", "incident-beam", "sample-cell", "detector", "saxs-curve-early", "saxs-curve-middle", "saxs-curve-late"] }
+    ],
+    "relationships": [
+      { "id": "reaction-to-unimers", "sourceObjectId": "reaction-medium", "predicate": "chain_extends_to", "targetObjectId": "soluble-unimers", "visualElementIds": ["arrow-1-line", "arrow-1-head"] },
+      { "id": "unimers-to-nucleus", "sourceObjectId": "soluble-unimers", "predicate": "nucleates", "targetObjectId": "micellar-nucleus", "visualElementIds": ["arrow-2-line", "arrow-2-head"] },
+      { "id": "nucleus-to-sphere", "sourceObjectId": "micellar-nucleus", "predicate": "grows_to", "targetObjectId": "sphere-morphology", "visualElementIds": ["arrow-3-line", "arrow-3-head"] },
+      { "id": "sphere-to-worm", "sourceObjectId": "sphere-morphology", "predicate": "reorganizes_to", "targetObjectId": "worm-morphology", "visualElementIds": ["arrow-4-line", "arrow-4-head"] },
+      { "id": "worm-to-vesicle", "sourceObjectId": "worm-morphology", "predicate": "reorganizes_to", "targetObjectId": "vesicle-morphology", "visualElementIds": ["arrow-5-line", "arrow-5-head"] },
+      { "id": "saxs-observes-vesicle", "sourceObjectId": "saxs-observation", "predicate": "tracks", "targetObjectId": "vesicle-morphology", "properties": { "evidence": "time-resolved SAXS" } }
+    ]
+  }
+}

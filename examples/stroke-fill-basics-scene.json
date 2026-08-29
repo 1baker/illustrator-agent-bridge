@@ -1,0 +1,66 @@
+{
+  "document": {
+    "title": "Stroke and compound-fill foundations",
+    "width": 1000,
+    "height": 650,
+    "colorMode": "RGB"
+  },
+  "elements": [
+    { "id": "title", "type": "text", "x": 42, "y": 30, "text": "How software turns paths into scientific marks", "size": 30, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "subtitle", "type": "text", "x": 44, "y": 72, "text": "stroke endings, corner joins, dash patterns, and filled regions with holes", "size": 17, "style": { "fill": "#475569", "stroke": null } },
+
+    { "id": "caps-heading", "type": "text", "x": 48, "y": 132, "text": "1. The same line, three endpoint rules", "size": 19, "style": { "fill": "#1E293B", "stroke": null } },
+    { "id": "butt-line", "type": "line", "x": 86, "y": 195, "x2": 300, "y2": 195, "style": { "stroke": "#2563EB", "strokeWidth": 18, "lineCap": "butt" } },
+    { "id": "butt-start", "type": "line", "x": 86, "y": 177, "x2": 86, "y2": 213, "style": { "stroke": "#94A3B8", "strokeWidth": 2 } },
+    { "id": "butt-end", "type": "line", "x": 300, "y": 177, "x2": 300, "y2": 213, "style": { "stroke": "#94A3B8", "strokeWidth": 2 } },
+    { "id": "butt-label", "type": "text", "x": 328, "y": 181, "text": "butt: stops at endpoints", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "round-line", "type": "line", "x": 86, "y": 250, "x2": 300, "y2": 250, "style": { "stroke": "#7C3AED", "strokeWidth": 18, "lineCap": "round" } },
+    { "id": "round-start", "type": "line", "x": 86, "y": 232, "x2": 86, "y2": 268, "style": { "stroke": "#94A3B8", "strokeWidth": 2 } },
+    { "id": "round-end", "type": "line", "x": 300, "y": 232, "x2": 300, "y2": 268, "style": { "stroke": "#94A3B8", "strokeWidth": 2 } },
+    { "id": "round-label", "type": "text", "x": 328, "y": 236, "text": "round: semicircle beyond endpoints", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "square-line", "type": "line", "x": 86, "y": 305, "x2": 300, "y2": 305, "style": { "stroke": "#0F766E", "strokeWidth": 18, "lineCap": "square" } },
+    { "id": "square-start", "type": "line", "x": 86, "y": 287, "x2": 86, "y2": 323, "style": { "stroke": "#94A3B8", "strokeWidth": 2 } },
+    { "id": "square-end", "type": "line", "x": 300, "y": 287, "x2": 300, "y2": 323, "style": { "stroke": "#94A3B8", "strokeWidth": 2 } },
+    { "id": "square-label", "type": "text", "x": 328, "y": 291, "text": "square: half-width beyond endpoints", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+
+    { "id": "joins-heading", "type": "text", "x": 48, "y": 365, "text": "2. Connected segments need a corner rule", "size": 19, "style": { "fill": "#1E293B", "stroke": null } },
+    { "id": "miter-path", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 76, "y": 478 }, { "x": 138, "y": 410 }, { "x": 200, "y": 478 }], "style": { "fill": null, "stroke": "#2563EB", "strokeWidth": 18, "lineCap": "round", "lineJoin": "miter", "miterLimit": 8 } },
+    { "id": "miter-label", "type": "text", "x": 102, "y": 500, "text": "miter", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "round-join-path", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 232, "y": 478 }, { "x": 294, "y": 410 }, { "x": 356, "y": 478 }], "style": { "fill": null, "stroke": "#7C3AED", "strokeWidth": 18, "lineCap": "round", "lineJoin": "round" } },
+    { "id": "round-join-label", "type": "text", "x": 264, "y": 500, "text": "round", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "bevel-path", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 388, "y": 478 }, { "x": 450, "y": 410 }, { "x": 512, "y": 478 }], "style": { "fill": null, "stroke": "#0F766E", "strokeWidth": 18, "lineCap": "round", "lineJoin": "bevel" } },
+    { "id": "bevel-label", "type": "text", "x": 422, "y": 500, "text": "bevel", "size": 16, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "dashed-path", "type": "path", "x": 0, "y": 0, "closed": false, "points": [{ "x": 76, "y": 575 }, { "x": 205, "y": 540 }, { "x": 360, "y": 580 }, { "x": 510, "y": 542 }], "style": { "fill": null, "stroke": "#EA580C", "strokeWidth": 7, "lineCap": "round", "lineJoin": "round", "dashArray": [18, 12], "dashOffset": 4 } },
+    { "id": "dashed-label", "type": "text", "x": 82, "y": 600, "text": "dash pattern: a provisional or indirect scientific relationship", "size": 16, "style": { "fill": "#9A3412", "stroke": null } },
+
+    { "id": "fill-heading", "type": "text", "x": 575, "y": 132, "text": "3. One filled shape can contain a hole", "size": 19, "style": { "fill": "#1E293B", "stroke": null } },
+    {
+      "id": "membrane-ring",
+      "name": "compound membrane boundary",
+      "type": "compound_path",
+      "x": 0,
+      "y": 0,
+      "fillRule": "evenodd",
+      "subpaths": [
+        { "points": [
+          { "x": 786, "y": 190, "leftX": 714.203, "leftY": 190, "rightX": 857.797, "rightY": 190, "pointType": "smooth" },
+          { "x": 916, "y": 320, "leftX": 916, "leftY": 248.203, "rightX": 916, "rightY": 391.797, "pointType": "smooth" },
+          { "x": 786, "y": 450, "leftX": 857.797, "leftY": 450, "rightX": 714.203, "rightY": 450, "pointType": "smooth" },
+          { "x": 656, "y": 320, "leftX": 656, "leftY": 391.797, "rightX": 656, "rightY": 248.203, "pointType": "smooth" }
+        ] },
+        { "points": [
+          { "x": 786, "y": 260, "leftX": 752.863, "leftY": 260, "rightX": 819.137, "rightY": 260, "pointType": "smooth" },
+          { "x": 846, "y": 320, "leftX": 846, "leftY": 286.863, "rightX": 846, "rightY": 353.137, "pointType": "smooth" },
+          { "x": 786, "y": 380, "leftX": 819.137, "leftY": 380, "rightX": 752.863, "rightY": 380, "pointType": "smooth" },
+          { "x": 726, "y": 320, "leftX": 726, "leftY": 353.137, "rightX": 726, "rightY": 286.863, "pointType": "smooth" }
+        ] }
+      ],
+      "style": { "fill": "#99F6E4", "stroke": "#0F766E", "strokeWidth": 5, "lineJoin": "round" }
+    },
+    { "id": "hole-label", "type": "text", "x": 730, "y": 294, "text": "empty", "size": 20, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "hole-label-2", "type": "text", "x": 728, "y": 323, "text": "interior", "size": 20, "style": { "fill": "#0F172A", "stroke": null } },
+    { "id": "ring-note", "type": "text", "x": 600, "y": 482, "text": "evenodd: outer boundary minus inner boundary", "size": 15, "style": { "fill": "#334155", "stroke": null } },
+    { "id": "topology-note-1", "type": "text", "x": 620, "y": 535, "text": "Useful for membranes, vessels, pores,", "size": 16, "style": { "fill": "#475569", "stroke": null } },
+    { "id": "topology-note-2", "type": "text", "x": 620, "y": 560, "text": "rings, and compartments", "size": 16, "style": { "fill": "#475569", "stroke": null } }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "document": {
+    "title": "Scientific Object Basics: Ligand Binding to a Cell Receptor",
+    "width": 1000,
+    "height": 620,
+    "colorMode": "RGB"
+  },
+  "elements": [
+    {
+      "id": "background",
+      "type": "rect",
+      "name": "background",
+      "x": 0,
+      "y": 0,
+      "width": 1000,
+      "height": 620,
+      "style": { "fill": "#F8FAFC", "stroke": null }
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "name": "title",
+      "x": 48,
+      "y": 34,
+      "text": "Shapes become scientific objects when identity and relationships are added",
+      "size": 26,
+      "style": { "fill": "#0F172A", "stroke": null }
+    },
+    {
+      "id": "cell-cytoplasm",
+      "type": "ellipse",
+      "name": "cell cytoplasm",
+      "x": 115,
+      "y": 145,
+      "width": 440,
+      "height": 360,
+      "style": { "fill": "#E0F2FE", "stroke": null, "opacity": 88 }
+    },
+    {
+      "id": "cell-membrane",
+      "type": "ellipse",
+      "name": "cell membrane",
+      "x": 115,
+      "y": 145,
+      "width": 440,
+      "height": 360,
+      "style": { "fill": null, "stroke": "#0369A1", "strokeWidth": 12 }
+    },
+    {
+      "id": "cell-nucleus",
+      "type": "ellipse",
+      "name": "cell nucleus",
+      "x": 245,
+      "y": 245,
+      "width": 170,
+      "height": 145,
+      "style": { "fill": "#C4B5FD", "stroke": "#6D28D9", "strokeWidth": 5 }
+    },
+    {
+      "id": "receptor-stem",
+      "type": "line",
+      "name": "receptor transmembrane stem",
+      "x": 540,
+      "y": 270,
+      "x2": 615,
+      "y2": 270,
+      "style": { "stroke": "#BE123C", "strokeWidth": 14 }
+    },
+    {
+      "id": "receptor-head",
+      "type": "path",
+      "name": "receptor binding pocket",
+      "x": 0,
+      "y": 0,
+      "closed": false,
+      "points": [
+        { "x": 610, "y": 235 },
+        { "x": 650, "y": 270 },
+        { "x": 610, "y": 305 }
+      ],
+      "style": { "fill": null, "stroke": "#BE123C", "strokeWidth": 12 }
+    },
+    {
+      "id": "ligand-body",
+      "type": "ellipse",
+      "name": "ligand molecule",
+      "x": 795,
+      "y": 235,
+      "width": 72,
+      "height": 72,
+      "style": { "fill": "#FDE68A", "stroke": "#B45309", "strokeWidth": 5 }
+    },
+    {
+      "id": "binding-path",
+      "type": "line",
+      "name": "ligand binding direction",
+      "x": 785,
+      "y": 271,
+      "x2": 680,
+      "y2": 271,
+      "style": { "stroke": "#475569", "strokeWidth": 5 }
+    },
+    {
+      "id": "binding-arrowhead",
+      "type": "polygon",
+      "name": "binding arrowhead",
+      "x": 0,
+      "y": 0,
+      "points": [
+        { "x": 680, "y": 271 },
+        { "x": 705, "y": 254 },
+        { "x": 705, "y": 288 }
+      ],
+      "style": { "fill": "#475569", "stroke": null }
+    },
+    {
+      "id": "cell-label",
+      "type": "text",
+      "name": "cell label",
+      "x": 245,
+      "y": 525,
+      "text": "cell",
+      "size": 22,
+      "style": { "fill": "#075985", "stroke": null }
+    },
+    {
+      "id": "receptor-label",
+      "type": "text",
+      "name": "receptor label",
+      "x": 575,
+      "y": 350,
+      "text": "membrane receptor",
+      "size": 19,
+      "style": { "fill": "#9F1239", "stroke": null }
+    },
+    {
+      "id": "ligand-label",
+      "type": "text",
+      "name": "ligand label",
+      "x": 790,
+      "y": 330,
+      "text": "ligand",
+      "size": 19,
+      "style": { "fill": "#92400E", "stroke": null }
+    },
+    {
+      "id": "relationship-label",
+      "type": "text",
+      "name": "relationship label",
+      "x": 685,
+      "y": 190,
+      "text": "binds_to",
+      "size": 18,
+      "style": { "fill": "#334155", "stroke": null }
+    }
+  ],
+  "semantics": {
+    "objects": [
+      {
+        "id": "cell-1",
+        "kind": "cell",
+        "label": "Example cell",
+        "elementIds": ["cell-cytoplasm", "cell-membrane", "cell-nucleus", "cell-label"],
+        "properties": { "diagramRole": "container", "notToScale": true }
+      },
+      {
+        "id": "receptor-1",
+        "kind": "membrane_receptor",
+        "label": "Surface receptor",
+        "elementIds": ["receptor-stem", "receptor-head", "receptor-label"]
+      },
+      {
+        "id": "ligand-1",
+        "kind": "ligand",
+        "label": "Ligand molecule",
+        "elementIds": ["ligand-body", "ligand-label"]
+      }
+    ],
+    "relationships": [
+      {
+        "id": "receptor-location",
+        "sourceObjectId": "receptor-1",
+        "predicate": "embedded_in",
+        "targetObjectId": "cell-1"
+      },
+      {
+        "id": "ligand-binding",
+        "sourceObjectId": "ligand-1",
+        "predicate": "binds_to",
+        "targetObjectId": "receptor-1",
+        "visualElementIds": ["binding-path", "binding-arrowhead", "relationship-label"],
+        "properties": { "directional": true }
+      }
+    ]
+  }
+}

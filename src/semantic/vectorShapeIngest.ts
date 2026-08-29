@@ -457,6 +457,14 @@ function sceneElementBox(element: SceneElement): RelationBox | undefined {
     ]).filter((point): point is { x: number; y: number } => Boolean(point)));
   }
 
+  if (element.type === "compound_path") {
+    return pointRelationBox(element.name ?? element.type, element.type, element.subpaths.flatMap((subpath) => subpath.points.flatMap((point) => [
+      { x: point.x, y: point.y },
+      point.leftX === undefined || point.leftY === undefined ? undefined : { x: point.leftX, y: point.leftY },
+      point.rightX === undefined || point.rightY === undefined ? undefined : { x: point.rightX, y: point.rightY }
+    ]).filter((point): point is { x: number; y: number } => Boolean(point))));
+  }
+
   const size = element.size ?? 18;
   return makeRelationBox(element.name ?? element.type, element.type, element.x, element.y - size, element.x + element.text.length * size * 0.55, element.y);
 }

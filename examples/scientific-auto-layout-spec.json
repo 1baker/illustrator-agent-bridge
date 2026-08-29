@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "title": "Automatically laid out signaling network",
+    "subtitle": "The specification declares entities and relationships but contains no x or y coordinates",
+    "width": 1400,
+    "height": 800
+  },
+  "objects": [
+    {
+      "id": "ligand",
+      "kind": "signaling_molecule",
+      "label": "ligand",
+      "width": 100,
+      "height": 72,
+      "recipe": "molecule",
+      "styleRole": "primary_object"
+    },
+    {
+      "id": "inhibitor",
+      "kind": "inhibitory_molecule",
+      "label": "inhibitor",
+      "width": 100,
+      "height": 72,
+      "recipe": "molecule",
+      "styleRole": "primary_object"
+    },
+    {
+      "id": "receptor",
+      "kind": "membrane_receptor",
+      "label": "receptor",
+      "width": 150,
+      "height": 110,
+      "recipe": "receptor",
+      "styleRole": "secondary_object"
+    },
+    {
+      "id": "kinase_a",
+      "kind": "protein_kinase",
+      "label": "kinase A",
+      "width": 140,
+      "height": 90,
+      "recipe": "protein",
+      "styleRole": "secondary_object"
+    },
+    {
+      "id": "kinase_b",
+      "kind": "protein_kinase",
+      "label": "kinase B",
+      "width": 140,
+      "height": 90,
+      "recipe": "protein",
+      "styleRole": "secondary_object"
+    },
+    {
+      "id": "gene_response",
+      "kind": "gene_expression_process",
+      "label": "gene response",
+      "width": 150,
+      "height": 76,
+      "recipe": "process",
+      "styleRole": "primary_object"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "binding",
+      "sourceObjectId": "ligand",
+      "predicate": "binds_to",
+      "targetObjectId": "receptor",
+      "label": "binds",
+      "role": "activation"
+    },
+    {
+      "id": "receptor_activation",
+      "sourceObjectId": "receptor",
+      "predicate": "activates",
+      "targetObjectId": "kinase_a",
+      "label": "activates",
+      "role": "activation"
+    },
+    {
+      "id": "forward_feedback",
+      "sourceObjectId": "kinase_a",
+      "predicate": "activates",
+      "targetObjectId": "kinase_b",
+      "role": "activation"
+    },
+    {
+      "id": "reverse_feedback",
+      "sourceObjectId": "kinase_b",
+      "predicate": "activates",
+      "targetObjectId": "kinase_a",
+      "role": "activation"
+    },
+    {
+      "id": "inhibitor_action",
+      "sourceObjectId": "inhibitor",
+      "predicate": "inhibits",
+      "targetObjectId": "kinase_b",
+      "label": "inhibits",
+      "role": "inhibition"
+    },
+    {
+      "id": "response_activation",
+      "sourceObjectId": "kinase_b",
+      "predicate": "activates",
+      "targetObjectId": "gene_response",
+      "label": "induces",
+      "role": "activation"
+    }
+  ],
+  "settings": {
+    "layoutMode": "layered",
+    "layoutDirection": "left_to_right",
+    "rankGap": 150,
+    "nodeGap": 88,
+    "routeClearance": 18
+  }
+}

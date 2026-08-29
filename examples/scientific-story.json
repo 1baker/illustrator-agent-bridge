@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "title": "Signaling story generated from scientific intent",
+    "subtitle": "Entity types and interactions are declared; recipes, dimensions, styles, coordinates, ports, and routes are inferred",
+    "width": 1400,
+    "height": 800
+  },
+  "entities": [
+    { "id": "ligand", "type": "molecule", "kind": "signaling_molecule", "label": "ligand" },
+    { "id": "inhibitor", "type": "molecule", "kind": "inhibitory_molecule", "label": "inhibitor" },
+    { "id": "receptor", "type": "receptor", "kind": "membrane_receptor", "label": "receptor", "emphasis": "secondary" },
+    { "id": "kinase_a", "type": "protein", "kind": "protein_kinase", "label": "kinase A", "emphasis": "secondary" },
+    { "id": "kinase_b", "type": "protein", "kind": "protein_kinase", "label": "kinase B", "emphasis": "secondary" },
+    { "id": "gene_response", "type": "process", "kind": "gene_expression_process", "label": "gene response" }
+  ],
+  "interactions": [
+    { "id": "binding", "sourceId": "ligand", "type": "binds_to", "targetId": "receptor", "label": "binds" },
+    { "id": "receptor_activation", "sourceId": "receptor", "type": "activates", "targetId": "kinase_a", "label": "activates" },
+    { "id": "forward_feedback", "sourceId": "kinase_a", "type": "activates", "targetId": "kinase_b" },
+    { "id": "reverse_feedback", "sourceId": "kinase_b", "type": "activates", "targetId": "kinase_a" },
+    { "id": "inhibitor_action", "sourceId": "inhibitor", "type": "inhibits", "targetId": "kinase_b", "label": "inhibits" },
+    { "id": "response_activation", "sourceId": "kinase_b", "type": "activates", "targetId": "gene_response", "label": "induces" }
+  ],
+  "presentation": {
+    "direction": "left_to_right",
+    "spacing": "normal"
+  }
+}

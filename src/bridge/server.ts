@@ -28,6 +28,20 @@ import { executeCartoonWorkflow } from "../workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow, type ObjectWorkflowRunMode } from "../workflow/objectExecutor.js";
 import { prepareCartoonWorkflow } from "../workflow/cartoonWorkflow.js";
 import { prepareObjectShapeWorkflow } from "../workflow/objectWorkflow.js";
+import { renderSceneToSvg } from "../render/svgRenderer.js";
+import { renderSceneToTikz } from "../render/tikzRenderer.js";
+import { renderScientificPlotToPgfplots } from "../render/pgfplotsRenderer.js";
+import { renderSceneToPng, type PngRenderResult } from "../render/pngRenderer.js";
+import { composeRasterLayersToPng, type RasterCompositionResult } from "../render/rasterCompositor.js";
+import { compileScientificFigure } from "../scientific/figureCompiler.js";
+import { planScientificStory } from "../scientific/storyPlanner.js";
+import { parseScientificText } from "../scientific/textStoryParser.js";
+import { constructPolygonBoolean } from "../core/polygonBoolean.js";
+import { flattenBezierPath } from "../core/bezierFlattening.js";
+import { expandStroke } from "../core/strokeExpansion.js";
+import { placePathMarkers } from "../core/pathMarkers.js";
+import { compileScientificPlot } from "../core/scientificPlot.js";
+import { generateScientificImage } from "../scientific/imageGenerator.js";
 
 export interface ServerOptions {
   host?: string;
@@ -249,6 +263,103 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
         illustratorResultPath: job.illustratorResultPath
       }
     });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/story") {
+    const story = await readJson(request);
+    const figure = planScientificStory(story);
+    const scene = compileScientificFigure(figure);
+    writeJson(response, 200, { ok: true, figure, scene, svg: renderSceneToSvg(scene) });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/text") {
+    const parsed = parseScientificText(await readJson(request) as Parameters<typeof parseScientificText>[0]);
+    const figure = planScientificStory(parsed.story);
+    const scene = compileScientificFigure(figure);
+    writeJson(response, 200, { ok: true, parsed, figure, scene, svg: renderSceneToSvg(scene) });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/plot") {
+    const result = compileScientificPlot(await readJson(request));
+    writeJson(response, 200, { ok: true, result, svg: renderSceneToSvg(result.scene) });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/pgfplots") {
+    const rendered = renderScientificPlotToPgfplots(await readJson(request));
+    writeJson(response, 200, { ok: true, latex: rendered.latex, renderer: rendered.renderer, compat: rendered.compat, plot: rendered.plot });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/image") {
+    const generated = generateScientificImage(await readJson(request));
+    writeJson(response, 200, {
+      ok: true,
+      manifest: generated.manifest,
+      intermediate: generated.intermediate,
+      scene: generated.scene,
+      svg: generated.svg,
+      latex: generated.latex,
+      pngBase64: generated.png.png.toString("base64")
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/render/tikz") {
+    const body = objectBody(await readJson(request));
+    const rendered = renderSceneToTikz(body.scene);
+    writeJson(response, 200, { ok: true, latex: rendered.latex, renderer: rendered.renderer, requiredPackages: rendered.requiredPackages });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/render/png") {
+    const body = objectBody(await readJson(request));
+    const rendered = renderSceneToPng(body.scene, {
+      width: optionalNumberBodyValue(body.width, "width"),
+      height: optionalNumberBodyValue(body.height, "height"),
+      scale: optionalNumberBodyValue(body.scale, "scale"),
+      background: optionalStringBodyValue(body.background, "background")
+    });
+    writePng(response, rendered);
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/render/composite") {
+    const body = objectBody(await readJson(request));
+    const rendered = composeRasterLayersToPng(body.composition, {
+      width: optionalNumberBodyValue(body.width, "width"),
+      height: optionalNumberBodyValue(body.height, "height"),
+      scale: optionalNumberBodyValue(body.scale, "scale"),
+      background: optionalStringBodyValue(body.background, "background")
+    });
+    writePng(response, rendered);
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/geometry/boolean") {
+    const result = constructPolygonBoolean(await readJson(request));
+    writeJson(response, 200, { ok: true, result });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/geometry/flatten-curve") {
+    const result = flattenBezierPath(await readJson(request));
+    writeJson(response, 200, { ok: true, result });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/geometry/expand-stroke") {
+    const result = expandStroke(await readJson(request));
+    writeJson(response, 200, { ok: true, result });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/geometry/path-markers") {
+    const result = placePathMarkers(await readJson(request));
+    writeJson(response, 200, { ok: true, result });
     return;
   }
 
@@ -727,6 +838,26 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
 function writeHtml(response: ServerResponse, status: number, body: string): void {
   response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
   response.end(body);
+}
+
+function writePng(response: ServerResponse, rendered: PngRenderResult | RasterCompositionResult): void {
+  const headers: Record<string, string | number> = {
+    "content-type": "image/png",
+    "content-length": rendered.png.length,
+    "x-renderer": rendered.renderer,
+    "x-source-width": rendered.sourceWidth,
+    "x-source-height": rendered.sourceHeight,
+    "x-render-width": rendered.width,
+    "x-render-height": rendered.height,
+    "x-render-fit": rendered.fit,
+    "x-render-background": rendered.background
+  };
+  if ("layerCount" in rendered) {
+    headers["x-layer-count"] = rendered.layerCount;
+    headers["x-visible-layer-count"] = rendered.visibleLayerCount;
+  }
+  response.writeHead(200, headers);
+  response.end(rendered.png);
 }
 
 function objectBody(input: unknown): Record<string, unknown> {

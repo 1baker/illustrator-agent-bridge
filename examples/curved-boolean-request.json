@@ -1,0 +1,43 @@
+{
+  "operation": "intersection",
+  "curveTolerance": 1,
+  "operands": [
+    {
+      "paths": [
+        {
+          "type": "path",
+          "x": 0,
+          "y": 0,
+          "closed": true,
+          "points": [
+            { "x": 170, "y": 70, "leftX": 120.294372515, "leftY": 70, "rightX": 219.705627485, "rightY": 70 },
+            { "x": 260, "y": 140, "leftX": 260, "leftY": 101.340067512, "rightX": 260, "rightY": 178.659932488 },
+            { "x": 170, "y": 210, "leftX": 219.705627485, "leftY": 210, "rightX": 120.294372515, "rightY": 210 },
+            { "x": 80, "y": 140, "leftX": 80, "leftY": 178.659932488, "rightX": 80, "rightY": 101.340067512 }
+          ]
+        }
+      ]
+    },
+    {
+      "paths": [
+        {
+          "type": "path",
+          "x": 0,
+          "y": 0,
+          "closed": true,
+          "points": [
+            { "x": 230, "y": 70, "leftX": 180.294372515, "leftY": 70, "rightX": 279.705627485, "rightY": 70 },
+            { "x": 320, "y": 140, "leftX": 320, "leftY": 101.340067512, "rightX": 320, "rightY": 178.659932488 },
+            { "x": 230, "y": 210, "leftX": 279.705627485, "leftY": 210, "rightX": 180.294372515, "rightY": 210 },
+            { "x": 140, "y": 140, "leftX": 140, "leftY": 178.659932488, "rightX": 140, "rightY": 101.340067512 }
+          ]
+        }
+      ]
+    }
+  ],
+  "output": {
+    "id": "shared-curved-domain",
+    "name": "shared curved scientific domain",
+    "style": { "fill": "#C4B5FD", "stroke": "#6D28D9", "strokeWidth": 3, "lineJoin": "round" }
+  }
+}

@@ -278,6 +278,281 @@ test("HTTP bridge plans a scientific concept scene", async () => {
   }
 });
 
+test("HTTP bridge generates a software-native scientific story without Adobe", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-story-"));
+  const server = await startBridgeServer({ port: 0, root });
+
+  try {
+    const response = await fetch(`${server.url}/v1/scientific/story`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        document: { title: "HTTP story" },
+        entities: [
+          { id: "substrate", type: "molecule", label: "substrate" },
+          { id: "enzyme", type: "protein", label: "enzyme" },
+          { id: "product", type: "molecule", label: "product" }
+        ],
+        interactions: [
+          { id: "association", sourceId: "substrate", type: "associates_with", targetId: "enzyme" },
+          { id: "conversion", sourceId: "enzyme", type: "converts_to", targetId: "product" }
+        ]
+      })
+    });
+
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      figure: { settings: { layoutMode: string } };
+      scene: { semantics: { objects: unknown[]; relationships: unknown[] } };
+      svg: string;
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.figure.settings.layoutMode, "layered");
+    assert.equal(body.scene.semantics.objects.length, 3);
+    assert.equal(body.scene.semantics.relationships.length, 2);
+    assert.match(body.svg, /data-format="scientific-image-generator\.scene-semantics\.v1"/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge generates a software-native scientific figure from controlled text", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-text-"));
+  const server = await startBridgeServer({ port: 0, root });
+
+  try {
+    const response = await fetch(`${server.url}/v1/scientific/text`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        text: "Title: HTTP text figure\nCanvas: 1000x700\nSubstrate [molecule] binds to enzyme [protein].\nEnzyme converts to product [molecule]."
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      parsed: { grammar: string; story: { entities: unknown[]; interactions: unknown[] } };
+      figure: { settings: { layoutMode: string } };
+      scene: { semantics: { objects: unknown[]; relationships: unknown[] } };
+      svg: string;
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.parsed.grammar, "scientific-controlled-text.v1");
+    assert.equal(body.parsed.story.entities.length, 3);
+    assert.equal(body.figure.settings.layoutMode, "layered");
+    assert.equal(body.scene.semantics.relationships.length, 2);
+    assert.match(body.svg, /data-format="scientific-image-generator\.scene-semantics\.v1"/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge rasterizes a validated vector scene without Adobe", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-render-png-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/render/png`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scene: {
+          document: { width: 320, height: 220 },
+          elements: [
+            { id: "line", type: "line", x: 20, y: 30, x2: 300, y2: 30, style: { fill: null, stroke: "#2563EB", strokeWidth: 4 } },
+            { id: "filled", type: "polygon", x: 0, y: 0, points: [{ x: 40, y: 70 }, { x: 280, y: 70 }, { x: 160, y: 190 }], style: { fill: "#BFDBFE", stroke: "#2563EB", strokeWidth: 4 } }
+          ]
+        },
+        width: 640,
+        background: "#FFFFFF"
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    assert.equal(response.headers.get("x-renderer"), "resvg-js-2.6.2");
+    assert.equal(response.headers.get("x-render-width"), "640");
+    assert.equal(response.headers.get("x-render-height"), "440");
+    const png = Buffer.from(await response.arrayBuffer());
+    assert.deepEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge composites scene layers with opacity and a mask without Adobe", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-render-composite-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const solidScene = (color: string) => ({
+      document: { width: 120, height: 80 },
+      elements: [{ type: "rect", x: 0, y: 0, width: 120, height: 80, style: { fill: color, stroke: null } }]
+    });
+    const response = await fetch(`${server.url}/v1/render/composite`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        composition: {
+          document: { width: 120, height: 80 },
+          layers: [
+            { id: "base", scene: solidScene("#FFFFFF") },
+            { id: "overlay", scene: solidScene("#2563EB"), opacity: 50, mask: { type: "ellipse", x: 20, y: 10, width: 80, height: 60 } }
+          ]
+        },
+        scale: 2,
+        background: "transparent"
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    assert.equal(response.headers.get("x-render-width"), "240");
+    assert.equal(response.headers.get("x-render-height"), "160");
+    assert.equal(response.headers.get("x-layer-count"), "2");
+    assert.equal(response.headers.get("x-visible-layer-count"), "2");
+    const png = Buffer.from(await response.arrayBuffer());
+    assert.deepEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge rasterizes reusable vector paints without Adobe", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-render-paints-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/render/png`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scene: {
+          document: { width: 160, height: 80 },
+          paints: [{ id: "ramp", type: "linear_gradient", x1: 0, y1: 0, x2: 1, y2: 0, stops: [{ offset: 0, color: "#FFFFFF" }, { offset: 100, color: "#2563EB" }] }],
+          elements: [{ id: "painted", type: "rect", x: 0, y: 0, width: 160, height: 80, style: { fillPaint: "ramp", stroke: null } }]
+        }
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    const png = Buffer.from(await response.arrayBuffer());
+    assert.deepEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge constructs polygon boolean geometry without Illustrator", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-boolean-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/geometry/boolean`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operation: "difference",
+        operands: [
+          { rings: [[{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }, { x: 0, y: 80 }]] },
+          { rings: [[{ x: 50, y: 20 }, { x: 150, y: 20 }, { x: 150, y: 100 }, { x: 50, y: 100 }]] }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; result: { area: number; empty: boolean; engine: string; element: { type: string } } };
+    assert.equal(body.ok, true);
+    assert.equal(body.result.area, 5000);
+    assert.equal(body.result.empty, false);
+    assert.equal(body.result.element.type, "compound_path");
+    assert.equal(body.result.engine, "polygon-clipping-0.15.7");
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge flattens cubic Bezier paths at an explicit tolerance", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-flatten-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/geometry/flatten-curve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        tolerance: 1,
+        path: {
+          type: "path",
+          x: 0,
+          y: 0,
+          closed: false,
+          points: [
+            { x: 0, y: 0, rightX: 0, rightY: 100 },
+            { x: 100, y: 0, leftX: 100, leftY: 100 }
+          ]
+        }
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; result: { curvedSegmentCount: number; outputPointCount: number; tolerance: number } };
+    assert.equal(body.ok, true);
+    assert.equal(body.result.curvedSegmentCount, 1);
+    assert.equal(body.result.tolerance, 1);
+    assert.ok(body.result.outputPointCount > 2);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge expands stroke appearance into filled geometry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-stroke-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/geometry/expand-stroke`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        tolerance: 0.1,
+        source: { type: "line", x: 0, y: 0, x2: 100, y2: 0, style: { stroke: "#2563EB", strokeWidth: 20, lineCap: "round" } }
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; result: { area: number; capCount: number; engine: string; element: { type: string } } };
+    assert.equal(body.ok, true);
+    assert.ok(body.result.area > 2300 && body.result.area < 2320);
+    assert.equal(body.result.capCount, 2);
+    assert.equal(body.result.element.type, "compound_path");
+    assert.equal(body.result.engine, "software-stroke-expansion.v1+polygon-clipping-0.15.7");
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge places tangent-aligned path markers without Illustrator", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-markers-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/geometry/path-markers`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: {
+          type: "path", x: 0, y: 0, closed: false,
+          points: [{ x: 0, y: 0, rightX: 0, rightY: 40 }, { x: 80, y: 80, leftX: 40, leftY: 80 }],
+          style: { stroke: "#0F766E", strokeWidth: 3 }
+        },
+        markers: [
+          { at: "start", kind: "circle", size: 12, idPrefix: "signal.start" },
+          { at: "end", kind: "arrowhead", size: 18, idPrefix: "signal.end" }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; result: { engine: string; placedMarkerCount: number; placements: Array<{ tangent: { x: number; y: number } }> } };
+    assert.equal(body.ok, true);
+    assert.equal(body.result.engine, "software-path-markers.v1");
+    assert.equal(body.result.placedMarkerCount, 2);
+    assert.deepEqual(body.result.placements.map((placement) => placement.tangent), [{ x: 0, y: 1 }, { x: 1, y: 0 }]);
+  } finally {
+    await server.close();
+  }
+});
+
 test("HTTP bridge plans and guards an object shape scene", async () => {
   const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-object-"));
   const server = await startBridgeServer({ port: 0, root });
@@ -754,6 +1029,101 @@ test("HTTP bridge QA checks PNG nonblank pixels", async () => {
     const body = (await response.json()) as { ok: boolean; report: { details?: { pixelAnalysis?: unknown } } };
     assert.equal(body.ok, true);
     assert.notEqual(body.report.details?.pixelAnalysis, undefined);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge compiles a scientific plot without Adobe", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-scientific-plot-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/scientific/plot`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        document: { title: "HTTP numerical plot", width: 800, height: 560 },
+        xAxis: { label: "Dose" },
+        yAxis: { label: "Response" },
+        series: [{ id: "response", label: "Response", mark: "scatter", data: [{ x: 1, y: 2, yError: 0.2 }] }]
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; result: { engine: string; scales: { y: { domain: number[] } } }; svg: string };
+    assert.equal(body.ok, true);
+    assert.equal(body.result.engine, "software-scientific-plot.v1");
+    assert.ok(body.result.scales.y.domain[0]! <= 1.8);
+    assert.match(body.svg, /id="response\.y-error\.0\.stem"/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge generates one scientific image artifact family without Adobe", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-unified-image-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const response = await fetch(`${server.url}/v1/scientific/image`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        kind: "text",
+        content: "Title: Unified HTTP image\nSignal [molecule] activates Response [process]."
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      manifest: { engine: string; adobeUsed: boolean; artifacts: { latex: { bytes: number }; png: { bytes: number } } };
+      svg: string;
+      latex: string;
+      pngBase64: string;
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.manifest.engine, "software-scientific-image.v1");
+    assert.equal(body.manifest.adobeUsed, false);
+    assert.match(body.svg, /Scientific figure|Unified HTTP image/);
+    assert.match(body.latex, /\\begin\{tikzpicture\}/);
+    assert.equal(Buffer.byteLength(body.latex), body.manifest.artifacts.latex.bytes);
+    const png = Buffer.from(body.pngBase64, "base64");
+    assert.equal(png.length, body.manifest.artifacts.png.bytes);
+    assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("HTTP bridge exposes standalone TikZ and PGFPlots renderers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-latex-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const tikzResponse = await fetch(`${server.url}/v1/render/tikz`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scene: { elements: [{ type: "rect", x: 0, y: 0, width: 40, height: 30, style: { fill: "#FFFFFF", stroke: "#000000" } }] } })
+    });
+    assert.equal(tikzResponse.status, 200);
+    const tikz = (await tikzResponse.json()) as { ok: boolean; latex: string; renderer: string };
+    assert.equal(tikz.renderer, "tikz-scene.v1");
+    assert.match(tikz.latex, /rectangle \(40,30\)/);
+
+    const pgfplotsResponse = await fetch(`${server.url}/v1/scientific/pgfplots`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        document: { title: "HTTP PGFPlots", width: 800, height: 560 },
+        xAxis: { label: "x" },
+        yAxis: { label: "y" },
+        series: [{ id: "series", label: "Series", mark: "line", data: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }]
+      })
+    });
+    assert.equal(pgfplotsResponse.status, 200);
+    const pgfplots = (await pgfplotsResponse.json()) as { ok: boolean; latex: string; compat: string };
+    assert.equal(pgfplots.compat, "1.18");
+    assert.match(pgfplots.latex, /\\addplot\+/);
   } finally {
     await server.close();
   }
