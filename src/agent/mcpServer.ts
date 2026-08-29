@@ -42,6 +42,7 @@ import { expandStroke } from "../core/strokeExpansion.js";
 import { placePathMarkers } from "../core/pathMarkers.js";
 import { compileScientificPlot } from "../core/scientificPlot.js";
 import { generateScientificImage } from "../scientific/imageGenerator.js";
+import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 const optionalRootSchema = z.string().min(1).optional();
 const optionalUrlSchema = z.string().url().optional();
@@ -79,7 +80,7 @@ export function createAgentMcpServer(): McpServer {
     },
     {
       instructions:
-        "Use generate_scientific_image as the unified Adobe-independent entrypoint for reviewed-brief, figure, story, controlled-text, and numerical-plot requests, including editable TikZ or PGFPlots LaTeX. The narrower generate_scientific_figure_from_text, generate_scientific_story, generate_scientific_plot, generate_scientific_pgfplots, and render_vector_scene_tikz tools remain available for callers that need their specialized contracts. Use place_path_markers for tangent-aligned scientific terminators, flatten_bezier_path for explicit-tolerance curve approximation, expand_vector_stroke for filled stroke outlines, construct_polygon_boolean for union/intersection/difference/xor, render_vector_scene_png for one derived raster artifact, and compose_vector_scene_layers_png for ordered layers, opacity, masks, and blend modes. " +
+        "Use generate_proposal_visuals when a proposal contains explicit proposal-visual declarations for figures, plots, or tables. Use generate_scientific_image as the unified Adobe-independent entrypoint for reviewed-brief, figure, story, controlled-text, and numerical-plot requests, including editable TikZ or PGFPlots LaTeX. The narrower generate_scientific_figure_from_text, generate_scientific_story, generate_scientific_plot, generate_scientific_pgfplots, and render_vector_scene_tikz tools remain available for callers that need their specialized contracts. Use place_path_markers for tangent-aligned scientific terminators, flatten_bezier_path for explicit-tolerance curve approximation, expand_vector_stroke for filled stroke outlines, construct_polygon_boolean for union/intersection/difference/xor, render_vector_scene_png for one derived raster artifact, and compose_vector_scene_layers_png for ordered layers, opacity, masks, and blend modes. " +
         "Use the Adobe tools only when the caller explicitly needs Illustrator or Photoshop as an optional editing or export adapter."
     }
   );
@@ -1097,6 +1098,31 @@ export function createAgentMcpServer(): McpServer {
             text: JSON.stringify({ ok: true, manifest: generated.manifest, intermediate: generated.intermediate, scene: generated.scene, svg: generated.svg, latex: generated.latex }, null, 2)
           },
           { type: "image" as const, data: generated.png.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "generate_proposal_visuals",
+    {
+      title: "Generate Proposal Figures and Tables",
+      description:
+        "Parse proposal-visual declarations, preserve their exact prompts, and route reviewed figures, numerical plots, and tables to TikZ, PGFPlots, LaTeX tables, or an explicit Illustrator-to-Photoshop SVG proof workflow.",
+      inputSchema: {
+        request: z.unknown(),
+        outputDir: z.string().min(1).optional(),
+        root: optionalRootSchema
+      }
+    },
+    async ({ request, outputDir, root }) => {
+      const generated = await generateProposalVisualPackage(request, { outputDir, root });
+      return {
+        content: [
+          { type: "text" as const, text: JSON.stringify({ ok: generated.ok, package: serializeProposalVisualPackage(generated, false) }, null, 2) },
+          ...generated.assets.flatMap((asset) => asset.renderer === "tikz" || asset.renderer === "pgfplots"
+            ? [{ type: "image" as const, data: asset.generated.png.png.toString("base64"), mimeType: "image/png" }]
+            : [])
         ]
       };
     }

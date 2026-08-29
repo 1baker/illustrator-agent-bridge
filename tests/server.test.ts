@@ -1095,6 +1095,47 @@ test("HTTP bridge generates one scientific image artifact family without Adobe",
   }
 });
 
+test("HTTP bridge accepts proposal visual declarations for browser clients", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-proposal-visuals-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const declaration = {
+      id: "criteria",
+      kind: "table",
+      renderer: "auto",
+      prompt: "Generate the reviewed go/no-go table.",
+      content: {
+        schemaVersion: 1,
+        title: "Go/no-go criteria",
+        columns: [
+          { id: "measure", heading: "Measure", alignment: "left" },
+          { id: "threshold", heading: "Threshold", alignment: "right" }
+        ],
+        rows: [{ id: "conversion", cells: ["Conversion", ">= 90%"] }]
+      }
+    };
+    const response = await fetch(`${server.url}/v1/proposal/visuals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        proposal: { title: "HTTP proposal", text: `\`\`\`proposal-visual\n${JSON.stringify(declaration)}\n\`\`\`` }
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      package: { routes: Array<{ resolved: string }>; assets: Array<{ prompt: string; generated: { latex: string } }> };
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.package.routes[0]?.resolved, "latex_table");
+    assert.equal(body.package.assets[0]?.prompt, declaration.prompt);
+    assert.match(body.package.assets[0]?.generated.latex ?? "", /Go\/no-go criteria/);
+  } finally {
+    await server.close();
+  }
+});
+
 test("HTTP bridge exposes standalone TikZ and PGFPlots renderers", async () => {
   const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-latex-"));
   const server = await startBridgeServer({ port: 0, root });

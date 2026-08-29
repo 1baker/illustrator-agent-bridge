@@ -161,3 +161,18 @@ test("planScientificConceptScene keeps nested refinement prompts out of scene ti
   }
   assert.ok(plan.conceptQueries[0]?.startsWith("core shell emulsion"));
 });
+
+test("planScientificConceptScene bounds long prompt-derived titles inside the artboard", () => {
+  const prompt = "Create a publication-style membrane electron-transfer mechanism with donor and acceptor states, a directional charge-transfer path, and a compact energy-level inset.";
+  const plan = planScientificConceptScene(prompt, corpus);
+  const title = plan.scene.elements.find((element) => element.name === "concept title");
+  assert.equal(title?.type, "text");
+  if (title?.type === "text") assert.ok(title.text.length <= 60);
+  const review = reviewArtworkQuality({
+    prompt,
+    scene: plan.scene,
+    exportQa: { ok: true, path: "concept.svg", format: "svg", bytes: 10_000, dimensions: { width: 960, height: 640 }, checks: [], details: { vectorElementCount: plan.scene.elements.length } }
+  });
+  assert.equal(review.ok, true);
+  assert.deepEqual(review.checks.filter((check) => check.status !== "pass"), []);
+});

@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { resolve } from "node:path";
 import { runJsxViaIllustratorCom } from "./comAutomation.js";
 import { dashboardHtml } from "./dashboard.js";
 import { createGeneratedJob } from "./jobs.js";
@@ -42,6 +43,7 @@ import { expandStroke } from "../core/strokeExpansion.js";
 import { placePathMarkers } from "../core/pathMarkers.js";
 import { compileScientificPlot } from "../core/scientificPlot.js";
 import { generateScientificImage } from "../scientific/imageGenerator.js";
+import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 export interface ServerOptions {
   host?: string;
@@ -305,6 +307,15 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
       latex: generated.latex,
       pngBase64: generated.png.png.toString("base64")
     });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/proposal/visuals") {
+    const generated = await generateProposalVisualPackage(await readJson(request), {
+      root,
+      outputDir: resolve(root, "exports", "proposal-visuals")
+    });
+    writeJson(response, 200, { ok: generated.ok, package: serializeProposalVisualPackage(generated) });
     return;
   }
 

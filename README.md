@@ -67,6 +67,7 @@ npm run scientific:plot
 npm run scientific:pgfplots
 npm run scientific:image
 npm run scientific:brief
+npm run proposal:visuals
 npm run render:tikz
 npm run scientific:interaction-grammar
 npm run scientific:symbol-vocabulary
@@ -218,6 +219,8 @@ The numerical plot compiler maps bounded line, scatter, and grouped-bar data thr
 The unified scientific-image generator puts the reviewed-brief, figure, typed-story, controlled-text, and numerical-plot compilers behind one fail-closed request envelope. Every kind produces the same semantic scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, intermediate record, and digest manifest with explicit `adobeUsed: false`. Run `npm run scientific:image`; see [docs/scientific-image-generator.md](docs/scientific-image-generator.md).
 
 The reviewed figure-brief workflow adds a provider-neutral generate-refine-export boundary inspired by public scientific-figure tools. Text, sketch notes, or reference notes become typed components and relationships; stable-ID refinements update only named content or layout before deterministic compilation to semantic scene, TikZ, SVG, PNG, and a digest manifest. It does not claim or copy any proprietary foundation model. Run `npm run scientific:brief`; see [docs/figurelabs-inspired-tikz-workflow.md](docs/figurelabs-inspired-tikz-workflow.md).
+
+Proposal-driven visual generation scans Markdown for reviewed `proposal-visual` declarations, preserves each exact prompt, and routes compatible assets to semantic TikZ figures, PGFPlots, deterministic LaTeX tables, or the Illustrator-to-Photoshop SVG proof adapter. Numerical values and table cells must be supplied explicitly and are never invented from prose. Run `npm run proposal:visuals`; see [docs/proposal-visual-generation.md](docs/proposal-visual-generation.md).
 
 The connector grammar keeps scientific interactions visually distinct. Activation, inhibition, association, transport, and conversion each receive a validated role, stroke token, and terminator rule while retaining their exact semantic predicate. Run `npm run scientific:interaction-grammar` and see [docs/scientific-connector-grammar.md](docs/scientific-connector-grammar.md).
 

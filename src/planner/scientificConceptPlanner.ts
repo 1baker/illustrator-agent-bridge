@@ -710,7 +710,7 @@ function titleFromPrompt(prompt: string): string {
     .trim()
     .replace(/\s+/g, " ");
   const title = cleaned.length > 0 ? cleaned : "Scientific concept scene";
-  return title.length > 88 ? `${title.slice(0, 85)}...` : title;
+  return title.length > 60 ? `${title.slice(0, 57)}...` : title;
 }
 
 function baseScientificPrompt(prompt: string): string {

@@ -39,6 +39,7 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     assert.ok(listed.tools.some((tool) => tool.name === "render_vector_scene_tikz"));
     assert.ok(listed.tools.some((tool) => tool.name === "compose_vector_scene_layers_png"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_image"));
+    assert.ok(listed.tools.some((tool) => tool.name === "generate_proposal_visuals"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_plot"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_pgfplots"));
     assert.ok(listed.tools.some((tool) => tool.name === "place_path_markers"));
@@ -83,6 +84,36 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     const unifiedImagePng = unifiedImageContent.find((item) => item.type === "image");
     assert.equal(unifiedImagePng?.mimeType, "image/png");
     assert.ok((unifiedImagePng?.data?.length ?? 0) > 100);
+
+    const proposalResult = await client.callTool({
+      name: "generate_proposal_visuals",
+      arguments: {
+        request: {
+          schemaVersion: 1,
+          proposal: {
+            title: "MCP proposal",
+            text: `\`\`\`proposal-visual\n${JSON.stringify({
+              id: "criteria",
+              kind: "table",
+              renderer: "latex_table",
+              prompt: "Generate the reviewed criteria table.",
+              content: {
+                schemaVersion: 1,
+                title: "Criteria",
+                columns: [{ id: "criterion", heading: "Criterion", alignment: "left" }],
+                rows: [{ id: "one", cells: ["Conversion >= 90%"] }]
+              }
+            })}\n\`\`\``
+          }
+        },
+        root
+      }
+    });
+    const proposalContent = proposalResult.content as Array<{ type: string; text?: string }>;
+    const proposalBody = JSON.parse(proposalContent[0]?.text ?? "");
+    assert.equal(proposalBody.ok, true);
+    assert.equal(proposalBody.package.routes[0].resolved, "latex_table");
+    assert.match(proposalBody.package.assets[0].generated.latex, /Criteria/);
 
     const plotResult = await client.callTool({
       name: "generate_scientific_plot",

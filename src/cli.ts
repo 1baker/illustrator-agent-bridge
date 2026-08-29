@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, extname, resolve } from "node:path";
 import { startAgentMcpStdioServer } from "./agent/mcpServer.js";
 import { getGeneratedJobPaths } from "./bridge/files.js";
 import { runJsxViaIllustratorCom } from "./bridge/comAutomation.js";
@@ -67,6 +67,11 @@ import { composeStrokeExpansionBasicsScene } from "./scientific/strokeExpansionB
 import { composePathMarkerBasicsScene } from "./scientific/pathMarkerBasics.js";
 import { composeVectorPaintBasicsScene } from "./scientific/vectorPaintBasics.js";
 import { generateScientificImage } from "./scientific/imageGenerator.js";
+import {
+  generateProposalVisualPackage,
+  type ProposalAdobeMode,
+  type ProposalVisualAsset
+} from "./proposal/proposalVisualWorkflow.js";
 
 async function main(argv: string[]): Promise<void> {
   const [command, ...rest] = argv;
@@ -119,6 +124,9 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "scientific:image":
       await generateUnifiedScientificImage(rest);
+      return;
+    case "proposal:visuals":
+      await generateProposalVisuals(rest);
       return;
     case "geometry:transform-basics":
       await renderTransformBasics(rest);
@@ -521,6 +529,105 @@ async function generateUnifiedScientificImage(args: string[]): Promise<void> {
     latexPdfSha256: compiledLatex?.sha256,
     ...generated.manifest
   }, null, 2));
+}
+
+async function generateProposalVisuals(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const proposalPath = resolve(options.positionals[0] ?? "examples/proposal-visual-plan.md");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/proposal-visuals");
+  const packageOutputPath = resolve(optionValue(options, "package-output") ?? resolve(outputDir, "proposal-visual-package.json"));
+  const proposalText = await readFile(proposalPath, "utf8");
+  const title = optionValue(options, "title") ?? basename(proposalPath, extname(proposalPath));
+  const adobeMode = optionalProposalAdobeMode(optionValue(options, "adobe-mode")) ?? "prepare";
+  const generated = await generateProposalVisualPackage(
+    { schemaVersion: 1, proposal: { title, text: proposalText }, adobeMode },
+    { outputDir, root: optionValue(options, "root") }
+  );
+  await mkdir(outputDir, { recursive: true });
+  const reports: Array<Record<string, unknown>> = [];
+  for (const asset of generated.assets) reports.push(await writeProposalVisualAsset(asset, outputDir, options));
+  const report = {
+    schemaVersion: generated.schemaVersion,
+    ok: generated.ok,
+    proposalPath,
+    outputDir,
+    proposal: generated.proposal,
+    adobeMode: generated.adobeMode,
+    routes: generated.routes,
+    assets: reports
+  };
+  await mkdir(dirname(packageOutputPath), { recursive: true });
+  await writeFile(packageOutputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ packageOutputPath, ...report }, null, 2));
+  if (!generated.ok) throw new ValidationError(`proposal visual generation failed final review; inspect ${packageOutputPath}`);
+}
+
+async function writeProposalVisualAsset(asset: ProposalVisualAsset, outputDir: string, options: ParsedOptions): Promise<Record<string, unknown>> {
+  if (asset.renderer === "adobe_svg_proof") {
+    const workflowOutputPath = resolve(outputDir, `${asset.id}.adobe-workflow.json`);
+    await writeFile(workflowOutputPath, `${JSON.stringify(asset.workflow, null, 2)}\n`, "utf8");
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      renderer: asset.renderer,
+      prompt: asset.prompt,
+      source: asset.source,
+      adobeMode: asset.adobeMode,
+      workflowOutputPath,
+      outputPath: asset.outputPath,
+      proofPngPath: asset.proofPngPath,
+      ok: asset.workflow.ok
+    };
+  }
+  const latexOutputPath = resolve(outputDir, `${asset.id}.tex`);
+  const pdfOutputPath = resolve(outputDir, `${asset.id}.pdf`);
+  await writeFile(latexOutputPath, asset.generated.latex, "utf8");
+  const compiled = await compileLatexWithTectonic(asset.generated.latex, { enginePath: resolveTectonicPath(options) });
+  await writeFile(pdfOutputPath, compiled.pdf);
+  if (asset.renderer === "latex_table") {
+    const tableOutputPath = resolve(outputDir, `${asset.id}.table.json`);
+    await writeFile(tableOutputPath, `${JSON.stringify(asset.generated.table, null, 2)}\n`, "utf8");
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      renderer: asset.renderer,
+      prompt: asset.prompt,
+      source: asset.source,
+      tableOutputPath,
+      latexOutputPath,
+      pdfOutputPath,
+      pdfBytes: compiled.bytes,
+      pdfSha256: compiled.sha256,
+      counts: asset.generated.counts
+    };
+  }
+  const manifestOutputPath = resolve(outputDir, `${asset.id}.manifest.json`);
+  const intermediateOutputPath = resolve(outputDir, `${asset.id}.intermediate.json`);
+  const sceneOutputPath = resolve(outputDir, `${asset.id}.scene.json`);
+  const svgOutputPath = resolve(outputDir, `${asset.id}.svg`);
+  const pngOutputPath = resolve(outputDir, `${asset.id}.png`);
+  await writeFile(manifestOutputPath, `${JSON.stringify(asset.generated.manifest, null, 2)}\n`, "utf8");
+  await writeFile(intermediateOutputPath, `${JSON.stringify(asset.generated.intermediate, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, asset.generated.sceneJson, "utf8");
+  await writeFile(svgOutputPath, asset.generated.svg, "utf8");
+  await writeFile(pngOutputPath, asset.generated.png.png);
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    renderer: asset.renderer,
+    prompt: asset.prompt,
+    source: asset.source,
+    manifestOutputPath,
+    intermediateOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    latexOutputPath,
+    pdfOutputPath,
+    pdfBytes: compiled.bytes,
+    pdfSha256: compiled.sha256,
+    manifest: asset.generated.manifest
+  };
 }
 
 async function renderBooleanGeometryBasics(args: string[]): Promise<void> {
@@ -1896,6 +2003,7 @@ Commands:
   scientific:plot [PLOT_JSON_PATH] [--result-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
   scientific:pgfplots [PLOT_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
   scientific:image [REQUEST_JSON_PATH] [--manifest-output JSON_PATH] [--intermediate-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--latex-output TEX_PATH] [--latex-pdf-output PDF_PATH] [--png-output PNG_PATH] [--tectonic-bin PATH]
+  proposal:visuals [PROPOSAL_MARKDOWN_PATH] [--output-dir DIR] [--package-output JSON_PATH] [--title TEXT] [--adobe-mode prepare|dry_run|execute] [--tectonic-bin PATH] [--root DIR]
   geometry:boolean [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
   geometry:flatten-curve [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
   geometry:expand-stroke [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
@@ -2038,6 +2146,12 @@ function optionalAdobeSvgProofRunMode(input: string | undefined): AdobeSvgProofR
   }
 
   return value;
+}
+
+function optionalProposalAdobeMode(input: string | undefined): ProposalAdobeMode | undefined {
+  if (input === undefined) return undefined;
+  if (input === "prepare" || input === "dry_run" || input === "execute") return input;
+  throw new ValidationError("adobe-mode must be prepare, dry_run, or execute");
 }
 
 function optionalExternalReviewProvider(input: string | undefined): "manual" | "auracall" | undefined {
