@@ -45,7 +45,8 @@ Photoshop is a still later consumer. It can rasterize or composite a vector resu
 - `src/scientific/diagramComposer.ts` expands scientific symbols, resolves port-based placement dependencies, checks collisions, and emits a vector scene.
 - `src/scientific/figureCompiler.ts` compiles one declarative figure specification through layout, recipes, routing, labels, styles, semantics, and final scene validation.
 - `src/scientific/textStoryParser.ts` converts a small fail-closed text grammar into the typed scientific story contract with a line-level audit trace.
-- `src/scientific/imageGenerator.ts` routes figure, story, controlled-text, and plot content through one request envelope and emits a common scene/SVG/LaTeX/PNG artifact family with stage provenance and digests.
+- `src/scientific/figureBrief.ts` applies bounded stable-ID refinements to reviewed text, sketch-note, or reference-note inputs before typed story planning.
+- `src/scientific/imageGenerator.ts` routes reviewed-brief, figure, story, controlled-text, and plot content through one request envelope and emits a common scene/SVG/LaTeX/PNG artifact family with stage provenance and digests.
 - `src/scientific/symbolRegistry.ts` maps semantic kinds to reusable, multi-element scientific vector recipes with a generic fallback.
 - `src/render/svgRenderer.ts` executes that scene as SVG.
 - `src/render/tikzRenderer.ts` maps flat-color scene paths, shapes, text, groups, opacity, z-order, and clipping into standalone TikZ while escaping untrusted labels.

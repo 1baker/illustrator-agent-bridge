@@ -79,7 +79,7 @@ export function createAgentMcpServer(): McpServer {
     },
     {
       instructions:
-        "Use generate_scientific_image as the unified Adobe-independent entrypoint for figure, story, controlled-text, and numerical-plot requests, including editable TikZ or PGFPlots LaTeX. The narrower generate_scientific_figure_from_text, generate_scientific_story, generate_scientific_plot, generate_scientific_pgfplots, and render_vector_scene_tikz tools remain available for callers that need their specialized contracts. Use place_path_markers for tangent-aligned scientific terminators, flatten_bezier_path for explicit-tolerance curve approximation, expand_vector_stroke for filled stroke outlines, construct_polygon_boolean for union/intersection/difference/xor, render_vector_scene_png for one derived raster artifact, and compose_vector_scene_layers_png for ordered layers, opacity, masks, and blend modes. " +
+        "Use generate_scientific_image as the unified Adobe-independent entrypoint for reviewed-brief, figure, story, controlled-text, and numerical-plot requests, including editable TikZ or PGFPlots LaTeX. The narrower generate_scientific_figure_from_text, generate_scientific_story, generate_scientific_plot, generate_scientific_pgfplots, and render_vector_scene_tikz tools remain available for callers that need their specialized contracts. Use place_path_markers for tangent-aligned scientific terminators, flatten_bezier_path for explicit-tolerance curve approximation, expand_vector_stroke for filled stroke outlines, construct_polygon_boolean for union/intersection/difference/xor, render_vector_scene_png for one derived raster artifact, and compose_vector_scene_layers_png for ordered layers, opacity, masks, and blend modes. " +
         "Use the Adobe tools only when the caller explicitly needs Illustrator or Photoshop as an optional editing or export adapter."
     }
   );
@@ -1085,7 +1085,7 @@ export function createAgentMcpServer(): McpServer {
     {
       title: "Generate a Scientific Image",
       description:
-        "Use one fail-closed software contract to compile a figure specification, typed story, controlled text, or numerical plot into a semantic vector scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, stage provenance, and digest manifest without Illustrator or Photoshop.",
+        "Use one fail-closed software contract to compile a reviewed figure brief, figure specification, typed story, controlled text, or numerical plot into a semantic vector scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, stage provenance, and digest manifest without Illustrator or Photoshop.",
       inputSchema: { request: z.unknown() }
     },
     async ({ request }) => {

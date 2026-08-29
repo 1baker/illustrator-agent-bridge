@@ -7,10 +7,11 @@ import { renderScientificPlotToPgfplots } from "../render/pgfplotsRenderer.js";
 import { renderSceneToSvg } from "../render/svgRenderer.js";
 import { renderSceneToTikz } from "../render/tikzRenderer.js";
 import { compileScientificFigure } from "./figureCompiler.js";
+import { compileScientificFigureBrief } from "./figureBrief.js";
 import { planScientificStory } from "./storyPlanner.js";
 import { parseScientificText } from "./textStoryParser.js";
 
-export type ScientificImageKind = "figure" | "story" | "text" | "plot";
+export type ScientificImageKind = "figure" | "story" | "text" | "plot" | "brief";
 
 export interface ScientificImageRequest {
   schemaVersion: 1;
@@ -119,8 +120,8 @@ export function normalizeScientificImageRequest(input: unknown): ScientificImage
   const value = record(input, "scientific image request");
   exactKeys(value, ["schemaVersion", "kind", "content", "output"], "scientific image request");
   if (value.schemaVersion !== 1) throw new ValidationError("scientific image request.schemaVersion must be 1");
-  if (value.kind !== "figure" && value.kind !== "story" && value.kind !== "text" && value.kind !== "plot") {
-    throw new ValidationError("scientific image request.kind must be figure, story, text, or plot");
+  if (value.kind !== "figure" && value.kind !== "story" && value.kind !== "text" && value.kind !== "plot" && value.kind !== "brief") {
+    throw new ValidationError("scientific image request.kind must be figure, story, text, plot, or brief");
   }
   if (!("content" in value)) throw new ValidationError("scientific image request.content is required");
   const output = value.output === undefined ? undefined : normalizeOutput(value.output);
@@ -143,6 +144,15 @@ function compileByKind(request: ScientificImageRequest): CompiledScientificImage
     const figure = planScientificStory(request.content);
     const scene = compileScientificFigure(figure);
     return { scene, stages: ["validate_typed_story", "plan_scientific_figure", "layout_scientific_figure", "validate_semantic_scene"], intermediate: { figure } };
+  }
+  if (request.kind === "brief") {
+    const brief = compileScientificFigureBrief(request.content);
+    const scene = compileScientificFigure(brief.figure);
+    return {
+      scene,
+      stages: ["validate_reviewed_figure_brief", "apply_stable_id_refinements", "plan_scientific_figure", "layout_scientific_figure", "validate_semantic_scene"],
+      intermediate: { brief: brief.audit, story: brief.story, figure: brief.figure }
+    };
   }
   const scene = compileScientificFigure(request.content);
   return { scene, stages: ["validate_figure_specification", "layout_scientific_figure", "validate_semantic_scene"], intermediate: {} };

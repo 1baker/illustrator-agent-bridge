@@ -1,6 +1,6 @@
 # Unified scientific image generator
 
-The unified generator is the main software entrypoint for scientific graphics. A caller selects an input kind and supplies content; the generator validates that content, compiles one semantic vector scene, and derives editable SVG, editable LaTeX, and PNG without launching Illustrator or Photoshop. Figure, story, and controlled-text requests use TikZ. Numerical plots use PGFPlots so the data, axes, ticks, legends, marks, and error bars remain plot semantics rather than flattened geometry.
+The unified generator is the main software entrypoint for scientific graphics. A caller selects an input kind and supplies content; the generator validates that content, compiles one semantic vector scene, and derives editable SVG, editable LaTeX, and PNG without launching Illustrator or Photoshop. Reviewed-brief, figure, story, and controlled-text requests use TikZ. Numerical plots use PGFPlots so the data, axes, ticks, legends, marks, and error bars remain plot semantics rather than flattened geometry.
 
 ## Request envelope
 
@@ -9,7 +9,7 @@ Every request has the same outer shape:
 ```json
 {
   "schemaVersion": 1,
-  "kind": "figure | story | text | plot",
+  "kind": "brief | figure | story | text | plot",
   "content": {},
   "output": {
     "png": {
@@ -25,6 +25,7 @@ Every request has the same outer shape:
 - `figure` accepts a declarative object, relationship, layout, and style specification.
 - `story` accepts typed scientific entities and interactions and infers figure recipes and layout.
 - `text` accepts the bounded controlled-text grammar and records a statement-level parse trace.
+- `brief` accepts provider-neutral source notes, typed components and relationships, and stable-ID refinements; it records the applied-refinement audit plus the exact story and figure plan.
 - `plot` accepts numerical line, scatter, and bar series with quantitative axes and optional uncertainty.
 
 The envelope and PNG option objects reject unsupported fields. PNG resize options are mutually exclusive. The selected compiler retains all of its existing bounds, ambiguity checks, collision checks, clipping checks, and semantic-reference validation.

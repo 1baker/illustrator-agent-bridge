@@ -66,6 +66,7 @@ npm run scientific:text
 npm run scientific:plot
 npm run scientific:pgfplots
 npm run scientific:image
+npm run scientific:brief
 npm run render:tikz
 npm run scientific:interaction-grammar
 npm run scientific:symbol-vocabulary
@@ -214,7 +215,9 @@ The controlled-text parser adds a small plain-language boundary without handing 
 
 The numerical plot compiler maps bounded line, scatter, and grouped-bar data through deterministic linear scales into axes, ticks, labels, clipped marks, x/y uncertainty bars, legends, and semantic vector objects. The example combines baseline bars, a model trajectory, and measured mean ± standard deviation in editable SVG, editable PGFPlots LaTeX, and derived PNG. Run `npm run scientific:plot` or `npm run scientific:pgfplots`; see [docs/scientific-plots.md](docs/scientific-plots.md) and [docs/latex-vector-rendering.md](docs/latex-vector-rendering.md).
 
-The unified scientific-image generator puts the figure, typed-story, controlled-text, and numerical-plot compilers behind one fail-closed request envelope. Every kind produces the same semantic scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, intermediate record, and digest manifest with explicit `adobeUsed: false`. Run `npm run scientific:image`; see [docs/scientific-image-generator.md](docs/scientific-image-generator.md).
+The unified scientific-image generator puts the reviewed-brief, figure, typed-story, controlled-text, and numerical-plot compilers behind one fail-closed request envelope. Every kind produces the same semantic scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, intermediate record, and digest manifest with explicit `adobeUsed: false`. Run `npm run scientific:image`; see [docs/scientific-image-generator.md](docs/scientific-image-generator.md).
+
+The reviewed figure-brief workflow adds a provider-neutral generate-refine-export boundary inspired by public scientific-figure tools. Text, sketch notes, or reference notes become typed components and relationships; stable-ID refinements update only named content or layout before deterministic compilation to semantic scene, TikZ, SVG, PNG, and a digest manifest. It does not claim or copy any proprietary foundation model. Run `npm run scientific:brief`; see [docs/figurelabs-inspired-tikz-workflow.md](docs/figurelabs-inspired-tikz-workflow.md).
 
 The connector grammar keeps scientific interactions visually distinct. Activation, inhibition, association, transport, and conversion each receive a validated role, stroke token, and terminator rule while retaining their exact semantic predicate. Run `npm run scientific:interaction-grammar` and see [docs/scientific-connector-grammar.md](docs/scientific-connector-grammar.md).
 
@@ -469,7 +472,7 @@ npm run mcp:serve
 ```
 
 That server exposes `generate_scientific_image` as the unified Adobe-independent generator, the narrower `generate_scientific_figure_from_text`, `generate_scientific_story`, and `generate_scientific_plot` tools, plus legacy tools for creating Illustrator JSX jobs and proxying Illustrator Beta MCP calls when configured.
-Use `generate_scientific_image` for new general-purpose callers. Its `kind` selects `figure`, `story`, `text`, or `plot`, while its common result includes stage provenance, a semantic scene, editable SVG, derived PNG, and an artifact digest manifest.
+Use `generate_scientific_image` for new general-purpose callers. Its `kind` selects `brief`, `figure`, `story`, `text`, or `plot`, while its common result includes stage provenance, a semantic scene, editable SVG, derived PNG, and an artifact digest manifest.
 Use `generate_scientific_figure_from_text` for controlled line-oriented statements. It returns the parse trace, typed story, inferred coordinate-free figure specification, resolved semantic vector scene, and editable SVG. The equivalent HTTP operation is `POST /v1/scientific/text`.
 Use `generate_scientific_story` when an agent has typed scientific entities and interactions. It returns the inferred coordinate-free figure specification, resolved semantic vector scene, and editable SVG without launching Illustrator or Photoshop. The equivalent HTTP operation is `POST /v1/scientific/story`.
 It also exposes `semantic_search_visual_knowledge` so an agent can retrieve object semantics and publication constraints before mutating Illustrator.
