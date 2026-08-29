@@ -1,0 +1,259 @@
+{
+  "schemaVersion": "ScientificFigureProject.v1",
+  "id": "golden_manuscript",
+  "title": "Mechanism and reviewed response",
+  "profile": "manuscript",
+  "size": {
+    "preset": "manuscript_double_column",
+    "dpi": 300
+  },
+  "layout": {
+    "rows": 1,
+    "columns": 2,
+    "gapMm": 3,
+    "paddingMm": 3
+  },
+  "panels": [
+    {
+      "id": "mechanism",
+      "label": "A",
+      "type": "schematic",
+      "row": 1,
+      "column": 1,
+      "content": {
+        "schemaVersion": 1,
+        "kind": "story",
+        "content": {
+          "schemaVersion": 1,
+          "document": {
+            "title": "Activation",
+            "width": 800,
+            "height": 520
+          },
+          "entities": [
+            {
+              "id": "ligand",
+              "type": "molecule",
+              "label": "Ligand"
+            },
+            {
+              "id": "receptor",
+              "type": "receptor",
+              "label": "Receptor"
+            },
+            {
+              "id": "response",
+              "type": "process",
+              "label": "Response"
+            }
+          ],
+          "interactions": [
+            {
+              "id": "binding",
+              "sourceId": "ligand",
+              "type": "binds_to",
+              "targetId": "receptor"
+            },
+            {
+              "id": "activation",
+              "sourceId": "receptor",
+              "type": "activates",
+              "targetId": "response"
+            }
+          ]
+        }
+      },
+      "evidenceIds": [
+        "ev_mechanism"
+      ],
+      "claimIds": [
+        "claim_mechanism"
+      ],
+      "semanticEvidence": [
+        {
+          "targetType": "object",
+          "targetId": "ligand",
+          "claimId": "claim_mechanism",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_mechanism"
+          ]
+        },
+        {
+          "targetType": "object",
+          "targetId": "receptor",
+          "claimId": "claim_mechanism",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_mechanism"
+          ]
+        },
+        {
+          "targetType": "object",
+          "targetId": "response",
+          "claimId": "claim_mechanism",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_mechanism"
+          ]
+        },
+        {
+          "targetType": "relationship",
+          "targetId": "binding",
+          "claimId": "claim_mechanism",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_mechanism"
+          ]
+        },
+        {
+          "targetType": "relationship",
+          "targetId": "activation",
+          "claimId": "claim_mechanism",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_mechanism"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "response_plot",
+      "label": "B",
+      "type": "plot",
+      "row": 1,
+      "column": 2,
+      "content": {
+        "schemaVersion": 1,
+        "document": {
+          "title": "Reviewed response",
+          "width": 800,
+          "height": 520
+        },
+        "xAxis": {
+          "label": "Condition",
+          "tickCount": 4
+        },
+        "yAxis": {
+          "label": "Response (%)",
+          "tickCount": 5,
+          "grid": true
+        },
+        "series": [
+          {
+            "id": "measured",
+            "label": "Reviewed mean ± SD",
+            "mark": "scatter",
+            "color": "#9B2C2C",
+            "data": [
+              {
+                "x": 1,
+                "y": 20,
+                "yError": 2
+              },
+              {
+                "x": 2,
+                "y": 42,
+                "yError": 4
+              },
+              {
+                "x": 3,
+                "y": 65,
+                "yError": 5
+              }
+            ]
+          }
+        ]
+      },
+      "evidenceIds": [
+        "ev_data"
+      ],
+      "claimIds": [
+        "claim_data"
+      ],
+      "semanticEvidence": [
+        {
+          "targetType": "quantitative_annotation",
+          "targetId": "measured",
+          "claimId": "claim_data",
+          "support": "supplied_data",
+          "evidenceIds": [
+            "ev_data"
+          ]
+        }
+      ]
+    }
+  ],
+  "sharedLegend": [
+    {
+      "id": "measured_legend",
+      "label": "Reviewed measurement",
+      "color": "#9B2C2C",
+      "evidenceIds": [
+        "ev_data"
+      ]
+    }
+  ],
+  "caption": "A, evidence-linked conceptual mechanism. B, reviewed response values with standard deviations.",
+  "altText": "Two manuscript panels show a ligand-receptor response mechanism and a measured response plot with uncertainty bars.",
+  "claims": [
+    {
+      "id": "claim_mechanism",
+      "text": "Ligand binding activates the response.",
+      "evidenceIds": [
+        "ev_mechanism"
+      ],
+      "uncertainty": "Conceptual consensus.",
+      "support": "evidence"
+    },
+    {
+      "id": "claim_data",
+      "text": "Response increases across reviewed conditions.",
+      "evidenceIds": [
+        "ev_data"
+      ],
+      "support": "supplied_data"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_mechanism",
+      "citation": "Representative reviewed mechanism source.",
+      "approved": true,
+      "sourceDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "kind": "litscout",
+      "claimIds": [
+        "claim_mechanism"
+      ]
+    },
+    {
+      "id": "ev_data",
+      "citation": "Reviewed structured dataset fixture.",
+      "approved": true,
+      "sourceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "kind": "supplied_data",
+      "claimIds": [
+        "claim_data"
+      ]
+    }
+  ],
+  "provenance": [],
+  "requestedOutputs": [
+    "svg",
+    "pdf",
+    "png",
+    "semantic_json",
+    "latex",
+    "analysis",
+    "manifest"
+  ],
+  "lifecycle": "brief_approved",
+  "revisionId": "rev1",
+  "approvals": {
+    "brief": {
+      "digest": "67ddc7ed32deef415542ad1f1f4bdb2f56d63324a9a44af497a73f496a728a2b",
+      "reviewer": "Golden fixture",
+      "reviewedAt": "2026-08-29T12:00:00Z"
+    }
+  }
+}

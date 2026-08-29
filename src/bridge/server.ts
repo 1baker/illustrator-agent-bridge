@@ -43,6 +43,7 @@ import { expandStroke } from "../core/strokeExpansion.js";
 import { placePathMarkers } from "../core/pathMarkers.js";
 import { compileScientificPlot } from "../core/scientificPlot.js";
 import { generateScientificImage } from "../scientific/imageGenerator.js";
+import { generateScientificFigureProject } from "../scientific/figureProjectGenerator.js";
 import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 export interface ServerOptions {
@@ -306,6 +307,19 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
       svg: generated.svg,
       latex: generated.latex,
       pngBase64: generated.png.png.toString("base64")
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/figure-project") {
+    const body = objectBody(await readJson(request));
+    const generated = await generateScientificFigureProject(body.project, {
+      assetRoot: optionalStringBodyValue(body.assetRoot, "assetRoot") ?? root,
+      runAnalysis: optionalBooleanBodyValue(body.runAnalysis, "runAnalysis")
+    });
+    writeJson(response, 200, {
+      ok: true, project: generated.project, manifest: generated.manifest, qa: generated.qa, semanticJson: generated.semanticJson,
+      analysisJson: generated.analysisJson, svg: generated.svg, latex: generated.latex, pngBase64: generated.png.toString("base64"), pdfBase64: generated.pdf.toString("base64")
     });
     return;
   }

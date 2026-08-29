@@ -67,6 +67,8 @@ import { composeStrokeExpansionBasicsScene } from "./scientific/strokeExpansionB
 import { composePathMarkerBasicsScene } from "./scientific/pathMarkerBasics.js";
 import { composeVectorPaintBasicsScene } from "./scientific/vectorPaintBasics.js";
 import { generateScientificImage } from "./scientific/imageGenerator.js";
+import { generateScientificFigureProject } from "./scientific/figureProjectGenerator.js";
+import { normalizeScientificFigureProject, semanticFigureDigest } from "./scientific/figureProject.js";
 import {
   generateProposalVisualPackage,
   type ProposalAdobeMode,
@@ -124,6 +126,12 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "scientific:image":
       await generateUnifiedScientificImage(rest);
+      return;
+    case "scientific:project":
+      await generateFigureProject(rest);
+      return;
+    case "scientific:project-digest":
+      await digestFigureProject(rest);
       return;
     case "proposal:visuals":
       await generateProposalVisuals(rest);
@@ -529,6 +537,32 @@ async function generateUnifiedScientificImage(args: string[]): Promise<void> {
     latexPdfSha256: compiledLatex?.sha256,
     ...generated.manifest
   }, null, 2));
+}
+
+async function generateFigureProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = resolve(options.positionals[0] ?? "examples/scientific-figure-project.json");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/scientific-figure-project");
+  const assetRoot = resolve(optionValue(options, "asset-root") ?? dirname(requestPath));
+  const generated = await generateScientificFigureProject(await readJsonFile(requestPath), { assetRoot, runAnalysis: flagValue(options, "run-analysis") });
+  await mkdir(outputDir, { recursive: true });
+  const base = generated.project.id;
+  const paths = {
+    svg: resolve(outputDir, `${base}.svg`), pdf: resolve(outputDir, `${base}.pdf`), png: resolve(outputDir, `${base}.png`),
+    semanticJson: resolve(outputDir, `${base}.semantic.json`), latex: resolve(outputDir, `${base}.tex`), analysis: resolve(outputDir, `${base}.analysis.json`), manifest: resolve(outputDir, `${base}.manifest.json`), qa: resolve(outputDir, `${base}.qa.json`)
+  };
+  await Promise.all([
+    writeFile(paths.svg, generated.svg, "utf8"), writeFile(paths.pdf, generated.pdf), writeFile(paths.png, generated.png), writeFile(paths.semanticJson, generated.semanticJson, "utf8"),
+    writeFile(paths.latex, generated.latex, "utf8"), writeFile(paths.analysis, generated.analysisJson, "utf8"), writeFile(paths.manifest, generated.manifestJson, "utf8"), writeFile(paths.qa, `${JSON.stringify(generated.qa, null, 2)}\n`, "utf8")
+  ]);
+  console.log(JSON.stringify({ ok: true, requestPath, assetRoot, outputDir, paths, manifest: generated.manifest, qa: generated.qa }, null, 2));
+}
+
+async function digestFigureProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = resolve(options.positionals[0] ?? "examples/golden-manuscript-figure-project.json");
+  const project = normalizeScientificFigureProject(await readJsonFile(requestPath));
+  console.log(JSON.stringify({ ok: true, project, semanticDigest: semanticFigureDigest(project) }, null, 2));
 }
 
 async function generateProposalVisuals(args: string[]): Promise<void> {

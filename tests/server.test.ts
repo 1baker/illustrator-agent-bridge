@@ -82,6 +82,23 @@ test("HTTP bridge serves the browser dashboard", async () => {
   }
 });
 
+test("HTTP bridge generates an approved multi-panel scientific figure project", async () => {
+  const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-project-http-"));
+  const server = await startBridgeServer({ port: 0, root });
+  try {
+    const project = JSON.parse(await readFile(join(process.cwd(), "examples", "golden-proposal-figure-project.json"), "utf8"));
+    const response = await fetch(`${server.url}/v1/scientific/figure-project`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project, assetRoot: join(process.cwd(), "examples") }) });
+    assert.equal(response.status, 200);
+    const body = await response.json() as { ok: boolean; manifest: { schemaVersion: string; artifacts: Record<string, string> }; qa: { ok: boolean }; svg: string; pdfBase64: string; pngBase64: string };
+    assert.equal(body.ok, true);
+    assert.equal(body.manifest.schemaVersion, "scientific-figure-manifest.v1");
+    assert.equal(body.qa.ok, true);
+    assert.match(body.svg, /data-panel-id="workflow"/);
+    assert.equal(Buffer.from(body.pdfBase64, "base64").subarray(0, 5).toString("ascii"), "%PDF-");
+    assert.ok(Buffer.from(body.pngBase64, "base64").length > 1000);
+  } finally { await server.close(); }
+});
+
 test("HTTP bridge probes Illustrator communication in dry-run mode", async () => {
   const root = await mkdtemp(join(tmpdir(), "illustrator-agent-bridge-probe-"));
   const server = await startBridgeServer({ port: 0, root });

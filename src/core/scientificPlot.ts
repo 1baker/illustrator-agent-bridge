@@ -56,8 +56,9 @@ export function compileScientificPlot(input: unknown): ScientificPlotResult {
   if (plotArea.width < 280 || plotArea.height < 220) throw new ValidationError("plot document is too small for axes, marks, labels, and legend");
 
   const xExtent = plotXExtent(spec.series);
-  const yExtent = dataExtent(spec.series, "y");
   const hasBars = spec.series.some((series) => series.mark === "bar");
+  const rawYExtent = dataExtent(spec.series, "y");
+  const yExtent = hasBars ? rawYExtent : paddedExtent(rawYExtent);
   const xScale = makeScale(xExtent, spec.xAxis, [plotArea.x, plotArea.x + plotArea.width], false);
   const yScale = makeScale(yExtent, spec.yAxis, [plotArea.y + plotArea.height, plotArea.y], hasBars);
   validateDataVisible(spec, xScale.domain, yScale.domain, hasBars);
@@ -197,10 +198,16 @@ function dataExtent(series: ScientificPlotSeriesSpec[], axis: "x" | "y"): [numbe
 function plotXExtent(series: ScientificPlotSeriesSpec[]): [number, number] {
   const extent = dataExtent(series, "x");
   const values = [...new Set(series.filter((item) => item.mark === "bar").flatMap((item) => item.data.map((point) => point.x)))].sort((a, b) => a - b);
-  if (values.length === 0) return extent;
+  if (values.length === 0) return paddedExtent(extent);
   const spacing = values.length === 1 ? Math.max(Math.abs(values[0]!) * 0.2, 2) : Math.min(...values.slice(1).map((value, index) => value - values[index]!));
   const padding = spacing * 0.45;
   return [Math.min(extent[0], values[0]! - padding), Math.max(extent[1], values.at(-1)! + padding)];
+}
+
+function paddedExtent(extent: [number, number]): [number, number] {
+  const span = extent[1] - extent[0];
+  const padding = span > 0 ? span * 0.03 : Math.abs(extent[0]) * 0.05 || 1;
+  return [extent[0] - padding, extent[1] + padding];
 }
 
 function validateDataVisible(spec: ScientificPlotSpec, xDomain: [number, number], yDomain: [number, number], hasBars: boolean): void {

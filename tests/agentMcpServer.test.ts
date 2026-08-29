@@ -39,6 +39,7 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     assert.ok(listed.tools.some((tool) => tool.name === "render_vector_scene_tikz"));
     assert.ok(listed.tools.some((tool) => tool.name === "compose_vector_scene_layers_png"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_image"));
+    assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_figure_project"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_proposal_visuals"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_plot"));
     assert.ok(listed.tools.some((tool) => tool.name === "generate_scientific_pgfplots"));
@@ -84,6 +85,15 @@ test("agent MCP server exposes and calls bridge job tools", async () => {
     const unifiedImagePng = unifiedImageContent.find((item) => item.type === "image");
     assert.equal(unifiedImagePng?.mimeType, "image/png");
     assert.ok((unifiedImagePng?.data?.length ?? 0) > 100);
+
+    const figureProject = JSON.parse(await readFile(join(process.cwd(), "examples", "golden-manuscript-figure-project.json"), "utf8"));
+    const projectResult = await client.callTool({ name: "generate_scientific_figure_project", arguments: { project: figureProject, assetRoot: join(process.cwd(), "examples") } });
+    const projectContent = projectResult.content as Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+    const projectBody = JSON.parse(projectContent.find((item) => item.type === "text")?.text ?? "");
+    assert.equal(projectBody.ok, true);
+    assert.equal(projectBody.manifest.schemaVersion, "scientific-figure-manifest.v1");
+    assert.equal(projectBody.qa.ok, true);
+    assert.ok((projectContent.find((item) => item.type === "image")?.data?.length ?? 0) > 1000);
 
     const proposalResult = await client.callTool({
       name: "generate_proposal_visuals",

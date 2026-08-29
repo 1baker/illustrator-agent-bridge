@@ -42,6 +42,7 @@ import { expandStroke } from "../core/strokeExpansion.js";
 import { placePathMarkers } from "../core/pathMarkers.js";
 import { compileScientificPlot } from "../core/scientificPlot.js";
 import { generateScientificImage } from "../scientific/imageGenerator.js";
+import { generateScientificFigureProject } from "../scientific/figureProjectGenerator.js";
 import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 const optionalRootSchema = z.string().min(1).optional();
@@ -1100,6 +1101,22 @@ export function createAgentMcpServer(): McpServer {
           { type: "image" as const, data: generated.png.png.toString("base64"), mimeType: "image/png" }
         ]
       };
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_figure_project",
+    {
+      title: "Generate a Scientific Figure Project",
+      description: "Compile a brief-approved ScientificFigureProject.v1 into deterministic multi-panel SVG, PDF, PNG, semantic JSON, editable LaTeX, analysis provenance, manifest, and publication QA. Supplied images remain immutable and Adobe is optional.",
+      inputSchema: { project: z.unknown(), assetRoot: z.string().min(1), runAnalysis: z.boolean().optional() }
+    },
+    async ({ project, assetRoot, runAnalysis }) => {
+      const generated = await generateScientificFigureProject(project, { assetRoot, runAnalysis });
+      return { content: [
+        { type: "text" as const, text: JSON.stringify({ ok: true, project: generated.project, manifest: generated.manifest, qa: generated.qa, semanticJson: generated.semanticJson, analysisJson: generated.analysisJson, svg: generated.svg, latex: generated.latex, pdfBase64: generated.pdf.toString("base64") }, null, 2) },
+        { type: "image" as const, data: generated.png.toString("base64"), mimeType: "image/png" }
+      ] };
     }
   );
 

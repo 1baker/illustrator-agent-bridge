@@ -1,0 +1,238 @@
+{
+  "schemaVersion": "ScientificFigureProject.v1",
+  "id": "golden_proposal",
+  "title": "Proposal workflow and decision gate",
+  "profile": "proposal",
+  "size": {
+    "preset": "proposal_full_width",
+    "dpi": 300
+  },
+  "layout": {
+    "rows": 1,
+    "columns": 2,
+    "gapMm": 3,
+    "paddingMm": 3
+  },
+  "panels": [
+    {
+      "id": "workflow",
+      "label": "A",
+      "type": "schematic",
+      "row": 1,
+      "column": 1,
+      "content": {
+        "schemaVersion": 1,
+        "kind": "story",
+        "content": {
+          "schemaVersion": 1,
+          "document": {
+            "title": "Workflow",
+            "width": 1000,
+            "height": 520
+          },
+          "entities": [
+            {
+              "id": "synthesis",
+              "type": "apparatus",
+              "label": "Synthesis"
+            },
+            {
+              "id": "analysis",
+              "type": "process",
+              "label": "Analysis"
+            },
+            {
+              "id": "decision",
+              "type": "process",
+              "label": "Go/no-go gate"
+            }
+          ],
+          "interactions": [
+            {
+              "id": "measure",
+              "sourceId": "synthesis",
+              "type": "transports_to",
+              "targetId": "analysis"
+            },
+            {
+              "id": "gate",
+              "sourceId": "analysis",
+              "type": "activates",
+              "targetId": "decision"
+            }
+          ]
+        }
+      },
+      "evidenceIds": [
+        "ev_plan"
+      ],
+      "claimIds": [
+        "claim_plan"
+      ],
+      "semanticEvidence": [
+        {
+          "targetType": "object",
+          "targetId": "synthesis",
+          "claimId": "claim_plan",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_plan"
+          ]
+        },
+        {
+          "targetType": "object",
+          "targetId": "analysis",
+          "claimId": "claim_plan",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_plan"
+          ]
+        },
+        {
+          "targetType": "object",
+          "targetId": "decision",
+          "claimId": "claim_plan",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_plan"
+          ]
+        },
+        {
+          "targetType": "relationship",
+          "targetId": "measure",
+          "claimId": "claim_plan",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_plan"
+          ]
+        },
+        {
+          "targetType": "relationship",
+          "targetId": "gate",
+          "claimId": "claim_plan",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_plan"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gate_plot",
+      "label": "B",
+      "type": "plot",
+      "row": 1,
+      "column": 2,
+      "content": {
+        "schemaVersion": 1,
+        "document": {
+          "title": "Decision metric",
+          "width": 800,
+          "height": 520
+        },
+        "xAxis": {
+          "label": "Milestone",
+          "tickCount": 4
+        },
+        "yAxis": {
+          "label": "Metric",
+          "tickCount": 5,
+          "grid": true
+        },
+        "series": [
+          {
+            "id": "target",
+            "label": "Reviewed target",
+            "mark": "line",
+            "color": "#1B6B68",
+            "data": [
+              {
+                "x": 1,
+                "y": 25
+              },
+              {
+                "x": 2,
+                "y": 55
+              },
+              {
+                "x": 3,
+                "y": 80
+              }
+            ]
+          }
+        ]
+      },
+      "evidenceIds": [
+        "ev_plan"
+      ],
+      "claimIds": [
+        "claim_plan"
+      ],
+      "semanticEvidence": [
+        {
+          "targetType": "quantitative_annotation",
+          "targetId": "target",
+          "claimId": "claim_plan",
+          "support": "evidence",
+          "evidenceIds": [
+            "ev_plan"
+          ]
+        }
+      ]
+    }
+  ],
+  "sharedLegend": [
+    {
+      "id": "target_legend",
+      "label": "Reviewed target",
+      "color": "#1B6B68",
+      "evidenceIds": [
+        "ev_plan"
+      ]
+    }
+  ],
+  "caption": "A, proposed experimental workflow. B, reviewed milestone target used for the decision gate.",
+  "altText": "Two proposal panels show a synthesis-to-analysis workflow and a milestone decision metric.",
+  "claims": [
+    {
+      "id": "claim_plan",
+      "text": "The reviewed decision gate follows analysis.",
+      "evidenceIds": [
+        "ev_plan"
+      ],
+      "uncertainty": "Proposed work, not completed results.",
+      "support": "evidence"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_plan",
+      "citation": "Reviewed proposal plan fixture.",
+      "approved": true,
+      "sourceDigest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "kind": "litscout",
+      "claimIds": [
+        "claim_plan"
+      ]
+    }
+  ],
+  "provenance": [],
+  "requestedOutputs": [
+    "svg",
+    "pdf",
+    "png",
+    "semantic_json",
+    "latex",
+    "analysis",
+    "manifest"
+  ],
+  "lifecycle": "brief_approved",
+  "revisionId": "rev1",
+  "approvals": {
+    "brief": {
+      "digest": "6f8b5508586eec0d4d7e16d0e90456868e923e24cdc56ad60cd7f5d6ff922b9a",
+      "reviewer": "Golden fixture",
+      "reviewedAt": "2026-08-29T12:00:00Z"
+    }
+  }
+}

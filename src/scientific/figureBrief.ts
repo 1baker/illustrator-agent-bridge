@@ -14,6 +14,11 @@ export interface ScientificFigureBriefCompilation {
     audience: FigureBriefAudience;
     intent: FigureBriefIntent;
     appliedRefinements: Array<{ index: number; operation: string; targetId?: string }>;
+    profile?: "manuscript" | "proposal";
+    claims: Array<{ id: string; text: string; evidenceIds: string[]; uncertainty?: string }>;
+    evidence: Array<{ id: string; citation: string }>;
+    panels: Array<Record<string, unknown>>;
+    requestedAnalysis: Array<Record<string, unknown>>;
   };
 }
 
@@ -24,7 +29,7 @@ export interface ScientificFigureBriefCompilation {
  */
 export function compileScientificFigureBrief(input: unknown): ScientificFigureBriefCompilation {
   const value = record(input, "scientific figure brief");
-  exactKeys(value, ["schemaVersion", "source", "brief", "components", "relationships", "refinements"], "scientific figure brief");
+  exactKeys(value, ["schemaVersion", "source", "brief", "components", "relationships", "refinements", "profile", "dimensions", "claims", "evidence", "panels", "requestedAnalysis"], "scientific figure brief");
   if (value.schemaVersion !== 1) throw new ValidationError("scientific figure brief.schemaVersion must be 1");
 
   const source = normalizeSource(value.source);
@@ -37,6 +42,19 @@ export function compileScientificFigureBrief(input: unknown): ScientificFigureBr
     ? []
     : array(value.relationships, "scientific figure brief.relationships", 60).map((item, index) => ({ ...record(item, `scientific figure brief.relationships[${index}]`) }));
   const refinements = value.refinements === undefined ? [] : array(value.refinements, "scientific figure brief.refinements", 24);
+  const evidence = value.evidence === undefined ? [] : array(value.evidence, "scientific figure brief.evidence", 200).map((item, index) => {
+    const entry = record(item, `scientific figure brief.evidence[${index}]`);
+    return { id: stableId(entry.id, `scientific figure brief.evidence[${index}].id`), citation: text(entry.citation, `scientific figure brief.evidence[${index}].citation`, 2000) };
+  });
+  const evidenceIds = new Set(evidence.map((item) => item.id));
+  const claims = value.claims === undefined ? [] : array(value.claims, "scientific figure brief.claims", 200).map((item, index) => {
+    const entry = record(item, `scientific figure brief.claims[${index}]`);
+    const ids = array(entry.evidenceIds, `scientific figure brief.claims[${index}].evidenceIds`, 100).map((id, idIndex) => stableId(id, `scientific figure brief.claims[${index}].evidenceIds[${idIndex}]`));
+    for (const id of ids) if (!evidenceIds.has(id)) throw new ValidationError(`scientific figure brief claim references unknown evidence: ${id}`);
+    return { id: stableId(entry.id, `scientific figure brief.claims[${index}].id`), text: text(entry.text, `scientific figure brief.claims[${index}].text`, 2000), evidenceIds: ids, ...(entry.uncertainty === undefined ? {} : { uncertainty: text(entry.uncertainty, `scientific figure brief.claims[${index}].uncertainty`, 1000) }) };
+  });
+  const panels = value.panels === undefined ? [] : array(value.panels, "scientific figure brief.panels", 24).map((item, index) => ({ ...record(item, `scientific figure brief.panels[${index}]`) }));
+  const requestedAnalysis = value.requestedAnalysis === undefined ? [] : array(value.requestedAnalysis, "scientific figure brief.requestedAnalysis", 24).map((item, index) => ({ ...record(item, `scientific figure brief.requestedAnalysis[${index}]`) }));
   const presentation: Record<string, unknown> = { direction: brief.direction, spacing: brief.spacing };
   const appliedRefinements: Array<{ index: number; operation: string; targetId?: string }> = [];
 
@@ -97,7 +115,9 @@ export function compileScientificFigureBrief(input: unknown): ScientificFigureBr
       sourceMode: source.mode,
       audience: brief.audience,
       intent: brief.intent,
-      appliedRefinements
+      appliedRefinements,
+      ...(value.profile === undefined ? {} : { profile: oneOf(value.profile, ["manuscript", "proposal"], "scientific figure brief.profile") as "manuscript" | "proposal" }),
+      claims, evidence, panels, requestedAnalysis
     }
   };
 }

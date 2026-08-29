@@ -36,6 +36,20 @@ test("compiles numerical domains into axes, marks, uncertainty, legend, and sema
   assert.equal(result.scene.elements.find((element) => element.id === "baseline.bar.3")?.type, "line", "zero-height bars remain explicit visible marks");
 });
 
+test("pads inferred line and scatter domains so endpoint marks are not clipped", () => {
+  const result = compileScientificPlot({
+    schemaVersion: 1,
+    document: { title: "Endpoint-safe plot" },
+    xAxis: { label: "x" },
+    yAxis: { label: "y" },
+    series: [{ id: "series", label: "Series", mark: "scatter", data: [{ x: 1, y: 2 }, { x: 3, y: 4 }] }]
+  });
+  assert.ok(result.scales.x.domain[0] < 1);
+  assert.ok(result.scales.x.domain[1] > 3);
+  assert.ok(result.scales.y.domain[0] < 2);
+  assert.ok(result.scales.y.domain[1] > 4);
+});
+
 test("renders editable axes, clipped marks, error bars, and semantic series identity", () => {
   const result = compileScientificPlot(mixedPlot);
   const svg = renderSceneToSvg(result.scene);
