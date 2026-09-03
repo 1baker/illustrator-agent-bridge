@@ -27,11 +27,25 @@ test("renders flat vector geometry, curves, groups, clips, and escaped labels as
   assert.match(result.latex, /Scientific semantics/);
 });
 
-test("fails closed for vector gradient paints instead of silently flattening them", () => {
-  assert.throws(() => renderSceneToTikz({
+test("renders bounded mutable vector gradient paints as editable TikZ shading", () => {
+  const result = renderSceneToTikz({
     paints: [{ id: "gradient", type: "linear_gradient", x1: 0, y1: 0, x2: 1, y2: 0, stops: [{ offset: 0, color: "#000000" }, { offset: 100, color: "#FFFFFF" }] }],
     elements: [{ type: "rect", x: 0, y: 0, width: 100, height: 100, style: { fillPaint: "gradient" } }]
-  }), /flat #RRGGBB colors only/);
+  });
+  assert.equal(result.renderer, "tikz-scene.v2");
+  assert.match(result.latex, /\\pgfdeclarehorizontalshading\{bridgepaint1\}/);
+  assert.match(result.latex, /shade, shading=bridgepaint1/);
+});
+
+test("fails closed for unsupported gradient transforms and gradient strokes", () => {
+  assert.throws(() => renderSceneToTikz({
+    paints: [{ id: "gradient", type: "linear_gradient", x1: 0, y1: 0, x2: 1, y2: 0, transform: [1, 0, 0, 1, 1, 0], stops: [{ offset: 0, color: "#000000" }, { offset: 100, color: "#FFFFFF" }] }],
+    elements: [{ type: "rect", x: 0, y: 0, width: 100, height: 100, style: { fillPaint: "gradient" } }]
+  }), /transforms are not supported/);
+  assert.throws(() => renderSceneToTikz({
+    paints: [{ id: "gradient", type: "linear_gradient", x1: 0, y1: 0, x2: 1, y2: 0, stops: [{ offset: 0, color: "#000000" }, { offset: 100, color: "#FFFFFF" }] }],
+    elements: [{ type: "line", x: 0, y: 0, x2: 100, y2: 100, style: { strokePaint: "gradient" } }]
+  }), /expand the stroke/);
 });
 
 test("escapes TeX control characters in untrusted scientific labels", () => {

@@ -243,7 +243,7 @@ function normalizeObject(input: unknown, path: string): ScientificFigureObjectSp
   const value = record(input, path);
   const shape = value.shape === undefined ? undefined : enumValue(value.shape, ["rect", "ellipse"], `${path}.shape`);
   const styleRole = value.styleRole === undefined ? undefined : enumValue(value.styleRole, ["primary_object", "secondary_object", "compartment"], `${path}.styleRole`);
-  const recipe = value.recipe === undefined ? undefined : enumValue(value.recipe, ["generic", "cell", "nucleus", "receptor", "molecule", "protein", "process", "dna", "rna", "membrane", "organelle", "particle", "apparatus"], `${path}.recipe`);
+  const recipe = value.recipe === undefined ? undefined : enumValue(value.recipe, ["generic", "cell", "nucleus", "receptor", "molecule", "protein", "process", "dna", "rna", "membrane", "organelle", "particle", "apparatus", "material", "transformation", "interface", "surface", "stimulus", "inset"], `${path}.recipe`);
   const labelPositions = value.labelPositions === undefined ? undefined : positionArray(value.labelPositions, `${path}.labelPositions`);
   return {
     id: stableId(value.id, `${path}.id`),

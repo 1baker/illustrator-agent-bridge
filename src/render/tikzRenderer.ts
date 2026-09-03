@@ -6,6 +6,7 @@ import type {
   VectorClip,
   VectorElement,
   VectorGroup,
+  VectorPaint,
   VectorScene,
   VectorStyle
 } from "../core/vectorScene.js";
@@ -15,21 +16,19 @@ const DEFAULT_HEIGHT = 480;
 
 export interface TikzRenderResult {
   latex: string;
-  renderer: "tikz-scene.v1";
-  requiredPackages: ["tikz", "xcolor"];
+  renderer: "tikz-scene.v1" | "tikz-scene.v2";
+  requiredPackages: string[];
 }
 
 /** Render a validated semantic vector scene as a standalone TikZ document. */
 export function renderSceneToTikz(input: unknown): TikzRenderResult {
   const scene = normalizeScene(input);
-  if ((scene.paints?.length ?? 0) > 0 || scene.elements.some((element) => element.style?.fillPaint || element.style?.strokePaint)) {
-    throw new ValidationError("TikZ rendering currently supports flat #RRGGBB colors only; gradient paint references are not supported");
-  }
+  const paints = paintRegistry(scene);
 
   const width = scene.document?.width ?? DEFAULT_WIDTH;
   const height = scene.document?.height ?? DEFAULT_HEIGHT;
   const colors = colorDefinitions(scene);
-  const body = renderComposition(scene, colors.names);
+  const body = renderComposition(scene, colors.names, paints.names);
   const semantics = scene.semantics === undefined
     ? []
     : [
@@ -41,8 +40,11 @@ export function renderSceneToTikz(input: unknown): TikzRenderResult {
     "% The semantic vector scene is authoritative; this file is an editable renderer artifact.",
     "\\documentclass[tikz,border=0pt]{standalone}",
     "\\usepackage{xcolor}",
+    "\\usepackage{fontspec}",
+    "\\setsansfont{DejaVu Sans}",
     "\\begin{document}",
     ...colors.definitions,
+    ...paints.definitions,
     `\\begin{tikzpicture}[x=1pt,y=-1pt]`,
     `  \\path[use as bounding box] (0,0) rectangle (${number(width)},${number(height)});`,
     ...semantics.map((line) => `  ${line}`),
@@ -52,8 +54,39 @@ export function renderSceneToTikz(input: unknown): TikzRenderResult {
     ""
   ].filter((line) => line !== "").join("\n");
 
-  return { latex, renderer: "tikz-scene.v1", requiredPackages: ["tikz", "xcolor"] };
+  return { latex, renderer: paints.names.size === 0 ? "tikz-scene.v1" : "tikz-scene.v2", requiredPackages: ["tikz", "xcolor", "fontspec"] };
 }
+
+interface PaintRegistry { names: Map<string, string>; definitions: string[]; }
+
+function paintRegistry(scene: VectorScene): PaintRegistry {
+  const referenced = new Set(scene.elements.flatMap((element) => [element.style?.fillPaint, element.style?.strokePaint]).filter((id): id is string => Boolean(id)));
+  const paints = [...(scene.paints ?? [])].filter((paint) => referenced.has(paint.id)).sort((a, b) => a.id.localeCompare(b.id));
+  for (const element of scene.elements) {
+    if (element.style?.strokePaint) throw new ValidationError("TikZ gradient strokes are not supported; expand the stroke to filled geometry first");
+  }
+  const names = new Map(paints.map((paint, index) => [paint.id, `bridgepaint${index + 1}`]));
+  return { names, definitions: paints.map((paint) => paintDefinition(paint, names.get(paint.id)!)) };
+}
+
+function paintDefinition(paint: VectorPaint, name: string): string {
+  if ((paint.units ?? "object_bounding_box") !== "object_bounding_box") throw new ValidationError(`TikZ paint ${paint.id} requires object_bounding_box units`);
+  if ((paint.spread ?? "pad") !== "pad") throw new ValidationError(`TikZ paint ${paint.id} requires pad spread`);
+  if (paint.transform !== undefined) throw new ValidationError(`TikZ paint ${paint.id} transforms are not supported`);
+  if (paint.stops.some((stop) => (stop.opacity ?? 100) !== 100)) throw new ValidationError(`TikZ paint ${paint.id} stop opacity is not supported`);
+  const stops = paint.stops.map((stop) => `color(${number(stop.offset)}bp)=(${paintColor(stop.color)})`).join("; ");
+  if (paint.type === "radial_gradient") {
+    if ((paint.fx !== undefined && paint.fx !== paint.cx) || (paint.fy !== undefined && paint.fy !== paint.cy)) throw new ValidationError(`TikZ radial paint ${paint.id} requires a centered focus`);
+    return `\\pgfdeclareradialshading{${name}}{\\pgfpoint{0bp}{0bp}}{${stops}}`;
+  }
+  const dx = paint.x2 - paint.x1;
+  const dy = paint.y2 - paint.y1;
+  if (Math.abs(dy) <= 1e-9 && Math.abs(dx) > 1e-9) return `\\pgfdeclarehorizontalshading{${name}}{100bp}{${stops}}`;
+  if (Math.abs(dx) <= 1e-9 && Math.abs(dy) > 1e-9) return `\\pgfdeclareverticalshading{${name}}{100bp}{${stops}}`;
+  throw new ValidationError(`TikZ linear paint ${paint.id} must be horizontal or vertical`);
+}
+
+function paintColor(hex: string): string { return `{rgb,255:red,${Number.parseInt(hex.slice(1, 3), 16)};green,${Number.parseInt(hex.slice(3, 5), 16)};blue,${Number.parseInt(hex.slice(5, 7), 16)}}`; }
 
 interface ColorRegistry {
   names: Map<string, string>;
@@ -73,6 +106,7 @@ function colorDefinitions(scene: VectorScene): ColorRegistry {
       if (element.style?.stroke !== null) values.add((element.style?.stroke ?? "#111111").toUpperCase());
     }
   }
+  for (const paint of scene.paints ?? []) for (const stop of paint.stops) values.add(stop.color.toUpperCase());
   const sorted = [...values].sort();
   const names = new Map(sorted.map((hex, index) => [hex, `bridgecolor${index + 1}`]));
   return {
@@ -81,7 +115,7 @@ function colorDefinitions(scene: VectorScene): ColorRegistry {
   };
 }
 
-function renderComposition(scene: VectorScene, colors: Map<string, string>): string {
+function renderComposition(scene: VectorScene, colors: Map<string, string>, paints: Map<string, string>): string {
   const groups = scene.groups ?? [];
   const indexedElements = scene.elements.map((element, index) => ({ element, index }));
   const indexedGroups = groups.map((group, index) => ({ group, index }));
@@ -96,7 +130,7 @@ function renderComposition(scene: VectorScene, colors: Map<string, string>): str
     return [...elements, ...childGroups]
       .sort((left, right) => left.zIndex - right.zIndex || left.index - right.index)
       .map((node) => node.kind === "element"
-        ? (node.value.visible === false ? "" : renderElement(node.value, node.index, colors, indent))
+        ? (node.value.visible === false ? "" : renderElement(node.value, node.index, colors, paints, indent))
         : renderGroup(node.value, colors, indent, renderContainer))
       .filter(Boolean)
       .join("\n");
@@ -122,20 +156,20 @@ function renderGroup(
   return output.join("\n");
 }
 
-function renderElement(element: VectorElement, index: number, colors: Map<string, string>, indent: string): string {
+function renderElement(element: VectorElement, index: number, colors: Map<string, string>, paints: Map<string, string>, indent: string): string {
   const id = element.id ?? `${element.type}_${index + 1}`;
   const prefix = `${indent}% element ${comment(id)} (${element.type})\n`;
   if (element.type === "text") {
     const options = [
       "anchor=north west",
       `text=${colorName(element.style?.fill ?? element.style?.stroke ?? "#111111", colors)}`,
-      `font={\\fontsize{${number(element.size ?? 18)}}{${number((element.size ?? 18) * 1.2)}}\\selectfont}`,
+      `font={\\sffamily\\fontsize{${number(element.size ?? 18)}}{${number((element.size ?? 18) * 1.2)}}\\selectfont}`,
       ...opacityOptions(element.style)
     ];
     return `${prefix}${indent}\\node[${options.join(", ")}] at (${number(element.x)},${number(element.y)}) {${tex(element.text)}};`;
   }
 
-  const options = styleOptions(element.style, colors, element.type === "line");
+  const options = styleOptions(element.style, colors, paints, element.type === "line");
   if (element.type === "compound_path" && element.fillRule === "evenodd") options.unshift("even odd rule");
   return `${prefix}${indent}\\path[${options.join(", ")}] ${elementGeometry(element)};`;
 }
@@ -185,11 +219,11 @@ function segment(from: PathPoint, to: PathPoint): string {
   return `-- ${coordinate(to)}`;
 }
 
-function styleOptions(style: VectorStyle | undefined, colors: Map<string, string>, line: boolean): string[] {
+function styleOptions(style: VectorStyle | undefined, colors: Map<string, string>, paints: Map<string, string>, line: boolean): string[] {
   const fill = line ? null : (style?.fill === undefined ? "#FFFFFF" : style.fill);
   const stroke = style?.stroke === undefined ? "#111111" : style.stroke;
   const options = [
-    fill === null ? "fill=none" : `fill=${colorName(fill, colors)}`,
+    style?.fillPaint ? `shade, shading=${paintName(style.fillPaint, paints)}` : fill === null ? "fill=none" : `fill=${colorName(fill, colors)}`,
     stroke === null ? "draw=none" : `draw=${colorName(stroke, colors)}`
   ];
   if (stroke !== null) options.push(`line width=${number(style?.strokeWidth ?? 2)}pt`);
@@ -200,6 +234,12 @@ function styleOptions(style: VectorStyle | undefined, colors: Map<string, string
   if (style?.dashOffset !== undefined) options.push(`dash phase=${number(style.dashOffset)}pt`);
   if (style?.opacity !== undefined) options.push(...opacityOptions(style));
   return options;
+}
+
+function paintName(value: string, paints: Map<string, string>): string {
+  const name = paints.get(value);
+  if (!name) throw new ValidationError(`TikZ paint registry is missing ${value}`);
+  return name;
 }
 
 function opacityOptions(style: VectorStyle | undefined): string[] {

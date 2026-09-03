@@ -40,7 +40,13 @@ export async function compileLatexWithTectonic(latex: string, options: LatexComp
   try {
     await writeFile(sourcePath, latex, "utf8");
     const enginePath = options.enginePath ?? process.env.TECTONIC_BIN ?? "tectonic";
-    const execution = await run(enginePath, ["-o", directory, sourcePath], timeoutMs);
+    const execution = await run(enginePath, ["-o", directory, sourcePath], timeoutMs, {
+      ...process.env,
+      // Tectonic otherwise generates a fresh PDF trailer ID on every run.
+      // Pinning the reproducible-build epoch makes identical LaTeX produce
+      // byte-identical PDF artifacts as well as identical vector content.
+      SOURCE_DATE_EPOCH: "0"
+    });
     const log = [execution.stdout, execution.stderr].filter(Boolean).join("\n").slice(-200_000);
     if (execution.exitCode !== 0) {
       throw new LatexCompilationError(`Tectonic rejected generated LaTeX with exit code ${execution.exitCode}`, log);
@@ -62,9 +68,9 @@ export async function compileLatexWithTectonic(latex: string, options: LatexComp
 
 interface ProcessResult { exitCode: number; stdout: string; stderr: string; }
 
-async function run(command: string, args: string[], timeoutMs: number): Promise<ProcessResult> {
+async function run(command: string, args: string[], timeoutMs: number, env: NodeJS.ProcessEnv): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let finished = false;

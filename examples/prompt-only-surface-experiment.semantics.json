@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "source": { "mode": "text", "description": "Experimental system concept", "notes": [] },
+  "brief": { "title": "Stimulus-driven surface experiment", "subtitle": "Prompt-only apparatus concept; dimensions unspecified", "audience": "presentation", "intent": "experimental_setup", "width": 1, "height": 1, "direction": "left_to_right", "spacing": "open" },
+  "components": [
+    { "id": "stimulus", "type": "stimulus", "kind": "external_light_field", "label": "Applied stimulus", "emphasis": "primary" },
+    { "id": "chamber", "type": "apparatus", "kind": "flow_chamber", "label": "Flow chamber", "emphasis": "primary" },
+    { "id": "surface", "type": "surface", "kind": "functional_sensor_surface", "label": "Sensor surface", "emphasis": "primary" },
+    { "id": "analyte", "type": "particle", "kind": "target_analyte", "label": "Target analyte", "emphasis": "secondary" }
+  ],
+  "relationships": [
+    { "id": "illuminates", "sourceId": "stimulus", "type": "illuminates", "targetId": "chamber", "label": "illumination" },
+    { "id": "contains", "sourceId": "chamber", "type": "contains", "targetId": "surface", "label": "contains" },
+    { "id": "captures", "sourceId": "surface", "type": "captures", "targetId": "analyte", "label": "capture" }
+  ],
+  "refinements": [],
+  "claims": [{ "id": "setup_hypothesis", "text": "The applied stimulus may enable surface capture in the chamber.", "evidenceIds": [], "support": "hypothesis", "uncertainty": "Conceptual setup; dimensions and performance are unspecified.", "targetIds": ["stimulus", "chamber", "surface", "analyte", "illuminates", "contains", "captures"] }]
+}

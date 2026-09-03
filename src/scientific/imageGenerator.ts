@@ -44,7 +44,7 @@ export interface ScientificImageManifest {
     png: ScientificImageArtifactDescriptor;
   };
   latex: {
-    renderer: "tikz-scene.v1" | "pgfplots-1.18.v1";
+    renderer: "tikz-scene.v1" | "tikz-scene.v2" | "pgfplots-1.18.v1";
     requiredPackages: string[];
     compat?: "1.18";
   };

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "source": { "mode": "text", "description": "Cellular signaling concept", "notes": [] },
+  "brief": { "title": "Receptor-mediated signaling", "subtitle": "Prompt-only conceptual pathway; not experimental data", "audience": "presentation", "intent": "pathway", "width": 1, "height": 1, "direction": "left_to_right", "spacing": "open" },
+  "components": [
+    { "id": "ligand", "type": "molecule", "kind": "signaling_ligand", "label": "Ligand", "emphasis": "primary" },
+    { "id": "receptor", "type": "receptor", "kind": "transmembrane_receptor", "label": "Membrane receptor", "emphasis": "primary" },
+    { "id": "kinase", "type": "protein", "kind": "signaling_kinase", "label": "Kinase cascade", "emphasis": "primary" },
+    { "id": "nucleus", "type": "nucleus", "kind": "gene_regulatory_nucleus", "label": "Gene response", "emphasis": "primary" }
+  ],
+  "relationships": [
+    { "id": "binds", "sourceId": "ligand", "type": "binds_to", "targetId": "receptor", "label": "binding" },
+    { "id": "activates", "sourceId": "receptor", "type": "activates", "targetId": "kinase", "label": "activation" },
+    { "id": "regulates", "sourceId": "kinase", "type": "regulates", "targetId": "nucleus", "label": "regulation" }
+  ],
+  "refinements": [],
+  "claims": [{ "id": "cellular_hypothesis", "text": "The ligand may trigger a receptor-to-nucleus response.", "evidenceIds": [], "support": "hypothesis", "uncertainty": "Conceptual pathway requiring experimental validation.", "targetIds": ["ligand", "receptor", "kinase", "nucleus", "binds", "activates", "regulates"] }]
+}

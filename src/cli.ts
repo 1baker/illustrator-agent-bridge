@@ -21,6 +21,7 @@ import { callIllustratorTool, getIllustratorMcpConfig, listIllustratorTools, Mcp
 import { OpenAiPlannerError } from "./planner/openAiCartoonPlanner.js";
 import { ObjectShapePlannerError, parseObjectShapeTarget, planObjectShapeScene } from "./planner/objectShapePlanner.js";
 import { planCartoonSceneWithMode, type PlannerMode } from "./planner/plannerRouter.js";
+import { StdioScientificBriefPlanner, type StdioScientificBriefPlannerOptions } from "./planner/stdioScientificBriefPlanner.js";
 import { ExportQaError, inspectExportArtifact } from "./qa/exportQa.js";
 import { reviewArtworkQuality } from "./qa/artworkReviewGuard.js";
 import { guardObjectShapeScene } from "./qa/objectShapeGuard.js";
@@ -68,7 +69,9 @@ import { composePathMarkerBasicsScene } from "./scientific/pathMarkerBasics.js";
 import { composeVectorPaintBasicsScene } from "./scientific/vectorPaintBasics.js";
 import { generateScientificImage } from "./scientific/imageGenerator.js";
 import { generateScientificFigureProject } from "./scientific/figureProjectGenerator.js";
-import { normalizeScientificFigureProject, semanticFigureDigest } from "./scientific/figureProject.js";
+import { approveScientificFigureBrief, approveScientificFigureFinal, normalizeScientificFigureProject, semanticFigureDigest, type ScientificFigureFinalApprovalEvidence } from "./scientific/figureProject.js";
+import { planScientificPromptFigure } from "./scientific/promptFigureWorkflow.js";
+import { promotePublicationFigure, rebuildPublicationFigureRegistry, searchPublicationFigureRegistry, type RegistryPromotionInput } from "./registry/publicationFigureRegistry.js";
 import {
   generateProposalVisualPackage,
   type ProposalAdobeMode,
@@ -132,6 +135,24 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "scientific:project-digest":
       await digestFigureProject(rest);
+      return;
+    case "scientific:prompt-plan":
+      await planPromptFigure(rest);
+      return;
+    case "scientific:approve-brief":
+      await approveFigureBrief(rest);
+      return;
+    case "scientific:approve-final":
+      await approveFigureFinal(rest);
+      return;
+    case "scientific:registry-search":
+      await searchFigureRegistry(rest);
+      return;
+    case "scientific:registry-rebuild":
+      await rebuildFigureRegistry(rest);
+      return;
+    case "scientific:registry-promote":
+      await promoteFigureRegistry(rest);
       return;
     case "proposal:visuals":
       await generateProposalVisuals(rest);
@@ -563,6 +584,72 @@ async function digestFigureProject(args: string[]): Promise<void> {
   const requestPath = resolve(options.positionals[0] ?? "examples/golden-manuscript-figure-project.json");
   const project = normalizeScientificFigureProject(await readJsonFile(requestPath));
   console.log(JSON.stringify({ ok: true, project, semanticDigest: semanticFigureDigest(project) }, null, 2));
+}
+
+async function planPromptFigure(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = resolve(options.positionals[0] ?? "examples/prompt-only-latent-diol-interphase.request.json");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/prompt-figure");
+  const replayPath = optionValue(options, "planner-output");
+  const adapterPath = optionValue(options, "planner-adapter");
+  if (replayPath !== undefined && adapterPath !== undefined) throw new ValidationError("scientific:prompt-plan accepts either --planner-output or --planner-adapter, not both");
+  const replayPlanner = replayPath === undefined ? undefined : { id: "replay-reviewed-semantics.v1", async plan() { return { mode: "openai" as const, brief: await readJsonFile(resolve(replayPath)), notes: ["Replayed a digest-bound provider semantic plan; geometry remains deterministic."] }; } };
+  const adapterPlanner = adapterPath === undefined ? undefined : new StdioScientificBriefPlanner(await readJsonFile(resolve(adapterPath)) as StdioScientificBriefPlannerOptions);
+  const result = await planScientificPromptFigure(await readJsonFile(requestPath), { registryRoot: optionValue(options, "registry"), planner: replayPlanner ?? adapterPlanner });
+  await mkdir(outputDir, { recursive: true });
+  const paths: Record<string, string> = { workflow: resolve(outputDir, `${result.request.id}.workflow.json`) };
+  const workflow = { ...result, preview: result.preview ? { manifest: result.preview.manifest, intermediate: result.preview.intermediate } : undefined };
+  await writeFile(paths.workflow, `${JSON.stringify(workflow, null, 2)}\n`, "utf8");
+  if (result.project && result.preview && result.qa) {
+    const tectonic = optionValue(options, "tectonic-bin"); const compiled = tectonic ? await compileLatexWithTectonic(result.preview.latex, { enginePath: resolve(tectonic) }) : undefined;
+    Object.assign(paths, { project: resolve(outputDir, `${result.request.id}.project.json`), program: resolve(outputDir, `${result.request.id}.figure-program.json`), scene: resolve(outputDir, `${result.request.id}.scene.json`), svg: resolve(outputDir, `${result.request.id}.svg`), tikz: resolve(outputDir, `${result.request.id}.tex`), png: resolve(outputDir, `${result.request.id}.png`), qa: resolve(outputDir, `${result.request.id}.qa.json`), ...(compiled ? { pdf: resolve(outputDir, `${result.request.id}.pdf`) } : {}) });
+    await Promise.all([
+      writeFile(paths.project!, `${JSON.stringify(result.project, null, 2)}\n`, "utf8"), writeFile(paths.program!, `${JSON.stringify(result.preview.intermediate.figureProgram ?? { schemaVersion: "FigureProgram.v1", compiler: "legacy" }, null, 2)}\n`, "utf8"), writeFile(paths.scene!, result.preview.sceneJson, "utf8"), writeFile(paths.svg!, result.preview.svg, "utf8"),
+      writeFile(paths.tikz!, result.preview.latex, "utf8"), writeFile(paths.png!, result.preview.png.png), writeFile(paths.qa!, `${JSON.stringify(result.qa, null, 2)}\n`, "utf8")
+    ]);
+    if (compiled && paths.pdf) await writeFile(paths.pdf, compiled.pdf);
+  }
+  console.log(JSON.stringify({ ok: true, status: result.status, nextGate: result.nextGate, requestDigest: result.requestDigest, semanticDigest: result.semanticDigest, qa: result.qa, paths }, null, 2));
+}
+
+async function approveFigureBrief(args: string[]): Promise<void> {
+  const options = parseOptions(args); const projectPath = options.positionals[0]; const reviewer = optionValue(options, "reviewer"), reviewedAt = optionValue(options, "reviewed-at"), output = optionValue(options, "output");
+  if (!projectPath || !reviewer || !reviewedAt || !output) throw new ValidationError("scientific:approve-brief requires PROJECT_JSON_PATH, --reviewer, --reviewed-at, and --output");
+  const project = approveScientificFigureBrief(await readJsonFile(resolve(projectPath)), reviewer, reviewedAt); const outputPath = resolve(output); await mkdir(dirname(outputPath), { recursive: true }); await writeFile(outputPath, `${JSON.stringify(project, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, lifecycle: project.lifecycle, briefDigest: project.approvals.brief?.digest, outputPath }, null, 2));
+}
+
+async function approveFigureFinal(args: string[]): Promise<void> {
+  const options = parseOptions(args); const projectPath = options.positionals[0], evidencePath = optionValue(options, "evidence"), reviewer = optionValue(options, "reviewer"), reviewedAt = optionValue(options, "reviewed-at"), output = optionValue(options, "output");
+  if (!projectPath || !evidencePath || !reviewer || !reviewedAt || !output) throw new ValidationError("scientific:approve-final requires PROJECT_JSON_PATH, --evidence, --reviewer, --reviewed-at, and --output");
+  const project = approveScientificFigureFinal(await readJsonFile(resolve(projectPath)), await readJsonFile(resolve(evidencePath)) as ScientificFigureFinalApprovalEvidence, reviewer, reviewedAt); const outputPath = resolve(output); await mkdir(dirname(outputPath), { recursive: true }); await writeFile(outputPath, `${JSON.stringify(project, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, lifecycle: project.lifecycle, finalDigest: project.approvals.final?.digest, outputPath }, null, 2));
+}
+
+async function searchFigureRegistry(args: string[]): Promise<void> {
+  const options = parseOptions(args); const queryPath = options.positionals[0];
+  if (!queryPath) throw new ValidationError("scientific:registry-search requires a query JSON path");
+  const root = resolve(optionValue(options, "registry") ?? "var/publication-figure-registry/v1");
+  console.log(JSON.stringify({ ok: true, root, ...(await searchPublicationFigureRegistry(root, await readJsonFile(queryPath) as Parameters<typeof searchPublicationFigureRegistry>[1])) }, null, 2));
+}
+
+async function rebuildFigureRegistry(args: string[]): Promise<void> {
+  const options = parseOptions(args); const root = resolve(optionValue(options, "registry") ?? "var/publication-figure-registry/v1");
+  console.log(JSON.stringify({ ok: true, root, ...(await rebuildPublicationFigureRegistry(root)) }, null, 2));
+}
+
+async function promoteFigureRegistry(args: string[]): Promise<void> {
+  const options = parseOptions(args); const bundlePath = options.positionals[0];
+  if (!bundlePath) throw new ValidationError("scientific:registry-promote requires a promotion bundle JSON path");
+  const absoluteBundle = resolve(bundlePath), bundleDir = dirname(absoluteBundle), bundle = await readJsonFile(absoluteBundle) as Record<string, unknown>;
+  const file = async (name: string, binary = false): Promise<string | Buffer> => { const value = bundle[name]; if (typeof value !== "string" || !value.trim()) throw new ValidationError(`promotion bundle.${name} must be a file path`); const path = resolve(bundleDir, value); return binary ? readFile(path) : readFile(path, "utf8"); };
+  const input: RegistryPromotionInput = {
+    id: String(bundle.id ?? ""), project: JSON.parse(String(await file("projectPath"))), finalEvidence: bundle.finalEvidence as RegistryPromotionInput["finalEvidence"],
+    scene: JSON.parse(String(await file("scenePath"))), tikz: String(await file("tikzPath")), svg: String(await file("svgPath")), png: await file("pngPath", true) as Buffer,
+    manifest: JSON.parse(String(await file("manifestPath"))), analysis: JSON.parse(String(await file("analysisPath"))), qa: JSON.parse(String(await file("qaPath"))), intent: bundle.intent as RegistryPromotionInput["intent"], promotion: bundle.promotion as RegistryPromotionInput["promotion"]
+  };
+  const root = resolve(optionValue(options, "registry") ?? "var/publication-figure-registry/v1");
+  console.log(JSON.stringify({ ok: true, root, entry: await promotePublicationFigure(root, input) }, null, 2));
 }
 
 async function generateProposalVisuals(args: string[]): Promise<void> {
@@ -2037,6 +2124,12 @@ Commands:
   scientific:plot [PLOT_JSON_PATH] [--result-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
   scientific:pgfplots [PLOT_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
   scientific:image [REQUEST_JSON_PATH] [--manifest-output JSON_PATH] [--intermediate-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--latex-output TEX_PATH] [--latex-pdf-output PDF_PATH] [--png-output PNG_PATH] [--tectonic-bin PATH]
+  scientific:prompt-plan REQUEST_JSON_PATH [--output-dir DIR] [--registry DIR] [--planner-output REVIEWED_SEMANTICS_JSON_PATH | --planner-adapter CONFIG_JSON_PATH] [--tectonic-bin PATH]
+  scientific:approve-brief PROJECT_JSON_PATH --reviewer TEXT --reviewed-at ISO_DATE --output PROJECT_JSON_PATH
+  scientific:approve-final PROJECT_JSON_PATH --evidence FINAL_EVIDENCE_JSON_PATH --reviewer TEXT --reviewed-at ISO_DATE --output PROJECT_JSON_PATH
+  scientific:registry-search QUERY_JSON_PATH [--registry DIR]
+  scientific:registry-rebuild [--registry DIR]
+  scientific:registry-promote PROMOTION_BUNDLE_JSON_PATH [--registry DIR]
   proposal:visuals [PROPOSAL_MARKDOWN_PATH] [--output-dir DIR] [--package-output JSON_PATH] [--title TEXT] [--adobe-mode prepare|dry_run|execute] [--tectonic-bin PATH] [--root DIR]
   geometry:boolean [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
   geometry:flatten-curve [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]

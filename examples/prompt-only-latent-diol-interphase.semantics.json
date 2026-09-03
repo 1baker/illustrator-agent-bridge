@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "mode": "text",
+    "description": "Reference-free prompt for a hypothesized latent-diol interphase mechanism.",
+    "notes": [
+      "No experimental values or reference image were supplied.",
+      "All relationships remain explicit hypotheses."
+    ]
+  },
+  "brief": {
+    "title": "Hypothesized formation of a latent-diol interphase",
+    "subtitle": "Prompt-only conceptual mechanism; not experimental data",
+    "audience": "presentation",
+    "intent": "mechanism",
+    "width": 1200,
+    "height": 735,
+    "direction": "left_to_right",
+    "spacing": "compact"
+  },
+  "components": [
+    {
+      "id": "protected_film",
+      "type": "material",
+      "kind": "semicrystalline_polymer_film",
+      "label": "Protected semicrystalline film",
+      "emphasis": "primary"
+    },
+    {
+      "id": "conversion_zone",
+      "type": "transformation",
+      "kind": "one_sided_deprotection_gradient",
+      "label": "Depth-dependent deprotection",
+      "emphasis": "primary"
+    },
+    {
+      "id": "diol_interphase",
+      "type": "interface",
+      "kind": "vicinal_diol_interphase",
+      "label": "Diol-rich interphase",
+      "emphasis": "primary"
+    },
+    {
+      "id": "silica_surface",
+      "type": "surface",
+      "kind": "hydroxylated_silica_surface",
+      "label": "Hydroxylated silica",
+      "emphasis": "secondary"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "deprotection",
+      "sourceId": "protected_film",
+      "type": "converts_to",
+      "targetId": "conversion_zone",
+      "label": "deprotection"
+    },
+    {
+      "id": "gradient_formation",
+      "sourceId": "conversion_zone",
+      "type": "converts_to",
+      "targetId": "diol_interphase",
+      "label": "depth profile"
+    },
+    {
+      "id": "surface_association",
+      "sourceId": "diol_interphase",
+      "type": "associates_with",
+      "targetId": "silica_surface",
+      "label": "association"
+    }
+  ],
+  "refinements": [],
+  "profile": "proposal",
+  "dimensions": {
+    "width": 1200,
+    "height": 735
+  },
+  "evidence": [],
+  "claims": [
+    {
+      "id": "latent_diol_hypothesis",
+      "text": "One-sided acid exposure may create a depth-dependent vicinal-diol-rich interphase that associates with hydroxylated silica and persists after neutralization.",
+      "evidenceIds": [],
+      "support": "hypothesis",
+      "uncertainty": "Conceptual mechanism generated from the prompt; no experimental evidence or quantitative calibration was supplied.",
+      "targetIds": [
+        "protected_film",
+        "conversion_zone",
+        "diol_interphase",
+        "silica_surface",
+        "deprotection",
+        "gradient_formation",
+        "surface_association"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "id": "main",
+      "purpose": "hypothesized mechanism"
+    }
+  ],
+  "requestedAnalysis": []
+}

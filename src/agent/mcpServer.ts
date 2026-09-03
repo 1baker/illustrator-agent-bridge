@@ -43,6 +43,8 @@ import { placePathMarkers } from "../core/pathMarkers.js";
 import { compileScientificPlot } from "../core/scientificPlot.js";
 import { generateScientificImage } from "../scientific/imageGenerator.js";
 import { generateScientificFigureProject } from "../scientific/figureProjectGenerator.js";
+import { planScientificPromptFigure } from "../scientific/promptFigureWorkflow.js";
+import { approveScientificFigureBrief, approveScientificFigureFinal } from "../scientific/figureProject.js";
 import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 const optionalRootSchema = z.string().min(1).optional();
@@ -1083,6 +1085,34 @@ export function createAgentMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "approve_scientific_figure_brief",
+    { title: "Approve a Scientific Figure Brief", description: "Record an explicit human brief approval bound to the current semantic SHA-256 digest. Any later semantic, source, layout, or registry-provenance change makes the approval stale.", inputSchema: { project: z.unknown(), reviewer: z.string().min(1), reviewedAt: z.string().min(1) } },
+    async ({ project, reviewer, reviewedAt }) => jsonToolResult({ ok: true, project: approveScientificFigureBrief(project, reviewer, reviewedAt) })
+  );
+
+  server.registerTool(
+    "approve_scientific_figure_final",
+    { title: "Approve a Final Scientific Figure", description: "Record explicit human final approval bound to the current semantic, artifact, manifest, QA, and analysis digests.", inputSchema: { project: z.unknown(), evidence: z.unknown(), reviewer: z.string().min(1), reviewedAt: z.string().min(1) } },
+    async ({ project, evidence, reviewer, reviewedAt }) => jsonToolResult({ ok: true, project: approveScientificFigureFinal(project, evidence as Parameters<typeof approveScientificFigureFinal>[1], reviewer, reviewedAt) })
+  );
+
+  server.registerTool(
+    "plan_publication_figure_from_prompt",
+    {
+      title: "Plan a Publication Figure from One Prompt",
+      description: "Plan scientific semantics from a plain prompt, retrieve approved presentation-only grammar, deterministically build editable scene/TikZ/SVG/PNG candidates, run measured scene QA, and stop at digest-bound human brief approval. The tool never fabricates data or approves its own output.",
+      inputSchema: { request: z.unknown(), registryRoot: z.string().min(1).optional() }
+    },
+    async ({ request, registryRoot }) => {
+      const generated = await planScientificPromptFigure(request, { registryRoot });
+      return { content: [
+        { type: "text" as const, text: JSON.stringify({ ok: true, status: generated.status, nextGate: generated.nextGate, requestDigest: generated.requestDigest, planner: generated.planner, presentationRetrieval: generated.presentationRetrieval, project: generated.project, semanticDigest: generated.semanticDigest, qa: generated.qa, preview: generated.preview ? { manifest: generated.preview.manifest, intermediate: generated.preview.intermediate, scene: generated.preview.scene, svg: generated.preview.svg, latex: generated.preview.latex } : undefined }, null, 2) },
+        ...(generated.preview ? [{ type: "image" as const, data: generated.preview.png.png.toString("base64"), mimeType: "image/png" as const }] : [])
+      ] };
+    }
+  );
+
+  server.registerTool(
     "generate_scientific_image",
     {
       title: "Generate a Scientific Image",
@@ -1149,7 +1179,7 @@ export function createAgentMcpServer(): McpServer {
     "render_vector_scene_tikz",
     {
       title: "Render a Vector Scene as TikZ",
-      description: "Render a validated flat-color semantic vector scene as a standalone editable TikZ LaTeX document without launching Adobe software.",
+      description: "Render a validated semantic vector scene, including bounded linear and radial gradient fills, as standalone editable TikZ LaTeX without launching Adobe software. Unsupported paint transforms and gradient strokes fail closed.",
       inputSchema: { scene: z.unknown() }
     },
     async ({ scene }) => jsonToolResult({ ok: true, ...renderSceneToTikz(scene) })

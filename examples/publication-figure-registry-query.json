@@ -1,0 +1,12 @@
+{
+  "profile": "proposal",
+  "intent": "mechanism",
+  "primitiveKinds": [
+    "rect",
+    "ellipse",
+    "line",
+    "path",
+    "text"
+  ],
+  "limit": 5
+}

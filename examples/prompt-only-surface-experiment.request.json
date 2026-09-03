@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "ScientificPromptFigureRequest.v1",
+  "id": "prompt-only-surface-experiment",
+  "prompt": "Show light driving a flow-chamber experiment with a functional sensor surface and target analyte.",
+  "profile": "proposal",
+  "size": { "preset": "proposal_full_width", "dpi": 300 },
+  "intent": "experimental_setup",
+  "evidence": [],
+  "claimPolicy": "allow_explicit_hypotheses",
+  "planner": "auto",
+  "presentation": { "direction": "left_to_right", "spacing": "open", "density": "balanced" },
+  "registry": { "mode": "disabled", "limit": 0 }
+}

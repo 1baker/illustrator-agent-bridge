@@ -3,7 +3,8 @@ import type { PathPoint, VectorElement, VectorStyle } from "../core/vectorScene.
 
 export type ScientificSymbolRecipeId =
   | "generic" | "cell" | "nucleus" | "receptor" | "molecule" | "protein" | "process"
-  | "dna" | "rna" | "membrane" | "organelle" | "particle" | "apparatus";
+  | "dna" | "rna" | "membrane" | "organelle" | "particle" | "apparatus"
+  | "material" | "transformation" | "interface" | "surface" | "stimulus" | "inset";
 export type SymbolShape = "rect" | "ellipse";
 export type SymbolRole = "primary_object" | "secondary_object" | "compartment";
 
@@ -46,7 +47,13 @@ const RECIPES: Record<ScientificSymbolRecipeId, Recipe> = {
   membrane: renderMembrane,
   organelle: renderOrganelle,
   particle: renderParticle,
-  apparatus: renderApparatus
+  apparatus: renderApparatus,
+  material: renderMaterial,
+  transformation: renderTransformation,
+  interface: renderInterface,
+  surface: renderSurface,
+  stimulus: renderStimulus,
+  inset: renderInset
 };
 
 /** Select and expand a semantic scientific object into reusable vector parts. */
@@ -65,6 +72,12 @@ export function inferScientificSymbolRecipe(kind: string): ScientificSymbolRecip
   if (hasAnyTerm(terms, "organelle", "mitochondrion", "mitochondria", "chloroplast")) return "organelle";
   if (hasAnyTerm(terms, "particle", "nanoparticle", "colloid")) return "particle";
   if (hasAnyTerm(terms, "apparatus", "flask", "beaker", "reactor", "instrument")) return "apparatus";
+  if (hasAnyTerm(terms, "film", "polymer", "material", "matrix", "coating")) return "material";
+  if (hasAnyTerm(terms, "gradient", "conversion", "deprotection", "transformation")) return "transformation";
+  if (hasAnyTerm(terms, "interface", "interphase", "boundary")) return "interface";
+  if (hasAnyTerm(terms, "surface", "substrate", "silica", "mineral")) return "surface";
+  if (hasAnyTerm(terms, "stimulus", "acid", "light", "heat", "trigger")) return "stimulus";
+  if (hasAnyTerm(terms, "inset", "zoom", "detail")) return "inset";
   if (hasAnyTerm(terms, "cell", "bacterium", "vesicle")) return "cell";
   if (hasAnyTerm(terms, "molecule", "ligand", "atom", "ion", "metabolite")) return "molecule";
   if (hasAnyTerm(terms, "protein", "enzyme", "kinase", "antibody")) return "protein";
@@ -351,6 +364,14 @@ function renderApparatus(request: SymbolRecipeRequest): RenderedScientificSymbol
     ]
   };
 }
+
+function renderMaterial(request: SymbolRecipeRequest): RenderedScientificSymbol { return relabelRecipe(renderGeneric(request), "material"); }
+function renderTransformation(request: SymbolRecipeRequest): RenderedScientificSymbol { return relabelRecipe(renderProcess(request), "transformation"); }
+function renderInterface(request: SymbolRecipeRequest): RenderedScientificSymbol { return relabelRecipe(renderMembrane(request), "interface"); }
+function renderSurface(request: SymbolRecipeRequest): RenderedScientificSymbol { return relabelRecipe(renderParticle(request), "surface"); }
+function renderStimulus(request: SymbolRecipeRequest): RenderedScientificSymbol { return relabelRecipe(renderMolecule(request), "stimulus"); }
+function renderInset(request: SymbolRecipeRequest): RenderedScientificSymbol { return relabelRecipe(renderCell(request), "inset"); }
+function relabelRecipe(result: RenderedScientificSymbol, recipeId: ScientificSymbolRecipeId): RenderedScientificSymbol { return { ...result, recipeId }; }
 
 function wavePoints(x: number, y: number, width: number, height: number, fractions: number[], heights: number[]): PathPoint[] {
   return fractions.map((fraction, index) => ({

@@ -5,7 +5,8 @@ import test from "node:test";
 import { compileLatexWithTectonic, LatexCompilationError } from "../src/render/latexCompiler.js";
 import { renderSceneToTikz } from "../src/render/tikzRenderer.js";
 
-const tectonic = resolve("var/tools/tectonic/tectonic");
+const tectonicCandidates = [resolve("var/tools/tectonic/tectonic"), resolve("var/tools/tectonic-0.16.9/tectonic")];
+const tectonic = tectonicCandidates.find((candidate) => existsSync(candidate)) ?? tectonicCandidates[0];
 
 test("rejects invalid source and timeout settings before starting TeX", async () => {
   await assert.rejects(() => compileLatexWithTectonic(""), LatexCompilationError);
@@ -25,6 +26,17 @@ test("compiles generated standalone TikZ into a real PDF", { skip: !existsSync(t
   assert.equal(compiled.pdf.subarray(0, 5).toString("ascii"), "%PDF-");
   assert.ok(compiled.bytes > 500);
   assert.match(compiled.sha256, /^[0-9a-f]{64}$/);
+});
+
+test("compiles identical LaTeX to a byte-identical PDF", { skip: !existsSync(tectonic) }, async () => {
+  const rendered = renderSceneToTikz({
+    document: { width: 120, height: 80 },
+    elements: [{ type: "rect", x: 10, y: 10, width: 80, height: 40, style: { fill: "#DBEAFE", stroke: "#1D4ED8" } }]
+  });
+  const first = await compileLatexWithTectonic(rendered.latex, { enginePath: tectonic });
+  const second = await compileLatexWithTectonic(rendered.latex, { enginePath: tectonic });
+  assert.equal(second.sha256, first.sha256);
+  assert.deepEqual(second.pdf, first.pdf);
 });
 
 test("surfaces TeX syntax errors instead of returning an artifact", { skip: !existsSync(tectonic) }, async () => {

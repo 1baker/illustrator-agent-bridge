@@ -12,7 +12,7 @@ export interface ScientificBriefPlanRequest {
 export interface ScientificBriefPlan {
   mode: "manual" | "openai";
   brief: unknown;
-  provider?: { name: "openai"; model: string; responseId?: string };
+  provider?: { name: "openai" | "stdio"; model: string; responseId?: string };
   notes: string[];
 }
 
@@ -64,7 +64,7 @@ export class OpenAiScientificBriefPlanner implements ScientificBriefPlanner {
         body: JSON.stringify({
           model, store: false, reasoning: { effort: "low" },
           text: { verbosity: "low", format: { type: "json_schema", name: "scientific_figure_brief", strict: true, schema: scientificBriefSchema() } },
-          instructions: "Propose scientific semantics only. Never choose coordinates. Preserve evidence ids on claims. Return a typed figure brief; deterministic software owns geometry and rendering.",
+          instructions: "Propose scientific semantics and coordinate-free depiction roles only. Never choose coordinates, paths, colors, TeX, data values, or physical measurements. Prefer material, transformation, interface, surface, stimulus, and inset roles when the prompt describes spatial or material mechanisms; use kind for a concise scientific subtype. Copy only supplied evidence ids and citations. Bind every claim to exact semantic target ids. Unsupported statements must be explicit hypotheses with uncertainty. Return a typed figure brief; deterministic software owns geometry and rendering.",
           input: [{ role: "user", content: [{ type: "input_text", text: JSON.stringify(request) }] }]
         }),
         signal: controller.signal
@@ -108,14 +108,20 @@ function extractOutputText(response: Record<string, unknown>): string {
 function scientificBriefSchema(): Record<string, unknown> {
   const stableId = { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_.:-]{0,119}$" };
   return {
-    type: "object", additionalProperties: false, required: ["schemaVersion", "source", "brief", "components", "relationships", "refinements"],
+    type: "object", additionalProperties: false, required: ["schemaVersion", "source", "brief", "components", "relationships", "refinements", "profile", "dimensions", "claims", "evidence", "panels", "requestedAnalysis"],
     properties: {
       schemaVersion: { type: "integer", const: 1 },
       source: { type: "object", additionalProperties: false, required: ["mode", "description", "notes"], properties: { mode: { type: "string", enum: ["text", "sketch_notes", "reference_notes"] }, description: { type: "string" }, notes: { type: "array", items: { type: "string" } } } },
-      brief: { type: "object", additionalProperties: false, required: ["title", "subtitle", "audience", "intent", "width", "height", "direction", "spacing"], properties: { title: { type: "string" }, subtitle: { type: ["string", "null"] }, audience: { type: "string", enum: ["journal", "presentation"] }, intent: { type: "string", enum: ["mechanism", "pathway", "workflow", "experimental_setup"] }, width: { type: "number" }, height: { type: "number" }, direction: { type: "string", enum: ["left_to_right", "top_to_bottom"] }, spacing: { type: "string", enum: ["compact", "normal", "open"] } } },
-      components: { type: "array", minItems: 1, maxItems: 24, items: { type: "object", additionalProperties: false, required: ["id", "type", "label", "emphasis"], properties: { id: stableId, type: { type: "string", enum: ["generic", "cell", "nucleus", "receptor", "molecule", "protein", "process", "dna", "rna", "membrane", "organelle", "particle", "apparatus"] }, label: { type: "string" }, emphasis: { type: ["string", "null"], enum: ["primary", "secondary", null] } } } },
-      relationships: { type: "array", maxItems: 60, items: { type: "object", additionalProperties: false, required: ["id", "sourceId", "type", "targetId", "label"], properties: { id: stableId, sourceId: stableId, type: { type: "string", enum: ["activates", "inhibits", "binds", "converts", "transports", "contains", "associates"] }, targetId: stableId, label: { type: ["string", "null"] } } } },
-      refinements: { type: "array", maxItems: 24, items: { type: "object" } }
+      brief: { type: "object", additionalProperties: false, required: ["title", "subtitle", "audience", "intent", "width", "height", "direction", "spacing"], properties: { title: { type: "string" }, subtitle: { type: "string" }, audience: { type: "string", enum: ["journal", "presentation"] }, intent: { type: "string", enum: ["mechanism", "pathway", "workflow", "experimental_setup"] }, width: { type: "number" }, height: { type: "number" }, direction: { type: "string", enum: ["left_to_right", "top_to_bottom"] }, spacing: { type: "string", enum: ["compact", "normal", "open"] } } },
+      components: { type: "array", minItems: 1, maxItems: 24, items: { type: "object", additionalProperties: false, required: ["id", "type", "kind", "label", "emphasis"], properties: { id: stableId, type: { type: "string", enum: ["generic", "cell", "nucleus", "receptor", "molecule", "protein", "process", "dna", "rna", "membrane", "organelle", "particle", "apparatus", "material", "transformation", "interface", "surface", "stimulus", "inset"] }, kind: stableId, label: { type: "string" }, emphasis: { type: "string", enum: ["primary", "secondary"] } } } },
+      relationships: { type: "array", maxItems: 60, items: { type: "object", additionalProperties: false, required: ["id", "sourceId", "type", "targetId", "label"], properties: { id: stableId, sourceId: stableId, type: { type: "string", enum: ["activates", "inhibits", "binds_to", "converts_to", "transports_to", "associates_with", "regulates", "contains", "measures", "flows_to", "illuminates", "captures"] }, targetId: stableId, label: { type: "string" } } } },
+      refinements: { type: "array", maxItems: 0, items: { type: "object", additionalProperties: false, required: [], properties: {} } },
+      profile: { type: "string", enum: ["manuscript", "proposal"] },
+      dimensions: { type: "object", additionalProperties: false, required: ["width", "height"], properties: { width: { type: "number" }, height: { type: "number" } } },
+      evidence: { type: "array", maxItems: 200, items: { type: "object", additionalProperties: false, required: ["id", "citation"], properties: { id: stableId, citation: { type: "string" } } } },
+      claims: { type: "array", minItems: 1, maxItems: 200, items: { type: "object", additionalProperties: false, required: ["id", "text", "evidenceIds", "support", "uncertainty", "targetIds"], properties: { id: stableId, text: { type: "string" }, evidenceIds: { type: "array", maxItems: 100, items: stableId }, support: { type: "string", enum: ["evidence", "hypothesis"] }, uncertainty: { type: "string" }, targetIds: { type: "array", minItems: 1, maxItems: 100, items: stableId } } } },
+      panels: { type: "array", maxItems: 24, items: { type: "object", additionalProperties: false, required: ["id", "purpose"], properties: { id: stableId, purpose: { type: "string" } } } },
+      requestedAnalysis: { type: "array", maxItems: 24, items: { type: "object", additionalProperties: false, required: ["id", "type"], properties: { id: stableId, type: { type: "string", enum: ["none", "segmentation", "detection"] } } } }
     }
   };
 }

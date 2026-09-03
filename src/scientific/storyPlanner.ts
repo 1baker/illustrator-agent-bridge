@@ -4,8 +4,9 @@ import type { ScientificSymbolRecipeId } from "./symbolRegistry.js";
 
 export type ScientificEntityType =
   | "molecule" | "receptor" | "protein" | "process" | "cell" | "nucleus" | "generic"
-  | "dna" | "rna" | "membrane" | "organelle" | "particle" | "apparatus";
-export type ScientificInteractionType = "activates" | "inhibits" | "binds_to" | "transports_to" | "converts_to" | "associates_with";
+  | "dna" | "rna" | "membrane" | "organelle" | "particle" | "apparatus"
+  | "material" | "transformation" | "interface" | "surface" | "stimulus" | "inset";
+export type ScientificInteractionType = "activates" | "inhibits" | "binds_to" | "transports_to" | "converts_to" | "associates_with" | "regulates" | "contains" | "measures" | "flows_to" | "illuminates" | "captures";
 export type ScientificStorySpacing = "compact" | "normal" | "open";
 
 export interface ScientificStoryEntity {
@@ -53,7 +54,13 @@ const ENTITY_VISUALS: Record<ScientificEntityType, { recipe: ScientificSymbolRec
   membrane: { recipe: "membrane", width: 220, height: 105 },
   organelle: { recipe: "organelle", width: 190, height: 125 },
   particle: { recipe: "particle", width: 135, height: 115 },
-  apparatus: { recipe: "apparatus", width: 165, height: 155 }
+  apparatus: { recipe: "apparatus", width: 165, height: 155 },
+  material: { recipe: "material", width: 180, height: 150 },
+  transformation: { recipe: "transformation", width: 150, height: 145 },
+  interface: { recipe: "interface", width: 190, height: 150 },
+  surface: { recipe: "surface", width: 160, height: 145 },
+  stimulus: { recipe: "stimulus", width: 140, height: 110 },
+  inset: { recipe: "inset", width: 190, height: 170 }
 };
 
 const SPACING: Record<ScientificStorySpacing, { rankGap: number; nodeGap: number; routeClearance: number }> = {
@@ -95,10 +102,11 @@ interface NormalizedStory {
 
 function planEntity(entity: ScientificStoryEntity): ScientificFigureObjectSpec {
   const visual = ENTITY_VISUALS[entity.type];
-  const labelWidth = entity.type === "molecule" ? visual.width : Math.min(280, entity.label.length * 9 + 30);
+  const depictionRole = entity.type === "material" || entity.type === "transformation" || entity.type === "interface" || entity.type === "surface" || entity.type === "stimulus" || entity.type === "inset";
+  const labelWidth = entity.type === "molecule" || depictionRole ? visual.width : Math.min(280, entity.label.length * 9 + 30);
   const compartment = entity.type === "cell" || entity.type === "nucleus";
   const secondaryByDefault = entity.type === "receptor" || entity.type === "protein" || entity.type === "membrane" || entity.type === "organelle" || entity.type === "apparatus";
-  const externalLabel = entity.type === "dna" || entity.type === "rna" || entity.type === "membrane" || entity.type === "organelle" || entity.type === "particle" || entity.type === "apparatus";
+  const externalLabel = entity.type === "dna" || entity.type === "rna" || entity.type === "membrane" || entity.type === "organelle" || entity.type === "particle" || entity.type === "apparatus" || entity.type === "material" || entity.type === "transformation" || entity.type === "interface" || entity.type === "surface" || entity.type === "stimulus" || entity.type === "inset";
   return {
     id: entity.id,
     kind: entity.kind ?? entity.type,
@@ -126,8 +134,9 @@ function planInteraction(interaction: ScientificStoryInteraction): ScientificFig
 function interactionRole(type: ScientificInteractionType): ScientificFigureRelationshipSpec["role"] {
   if (type === "inhibits") return "inhibition";
   if (type === "binds_to" || type === "associates_with") return "association";
-  if (type === "transports_to") return "transport";
+  if (type === "transports_to" || type === "flows_to" || type === "contains") return "transport";
   if (type === "converts_to") return "conversion";
+  if (type === "measures" || type === "captures") return "association";
   return "activation";
 }
 
@@ -163,7 +172,7 @@ function normalizeEntity(input: unknown, path: string): ScientificStoryEntity {
   const value = record(input, path);
   return {
     id: stableId(value.id, `${path}.id`),
-    type: enumValue(value.type, ["molecule", "receptor", "protein", "process", "cell", "nucleus", "generic", "dna", "rna", "membrane", "organelle", "particle", "apparatus"], `${path}.type`) as ScientificEntityType,
+    type: enumValue(value.type, ["molecule", "receptor", "protein", "process", "cell", "nucleus", "generic", "dna", "rna", "membrane", "organelle", "particle", "apparatus", "material", "transformation", "interface", "surface", "stimulus", "inset"], `${path}.type`) as ScientificEntityType,
     label: textValue(value.label, `${path}.label`, 160),
     ...(value.kind === undefined ? {} : { kind: semanticTerm(value.kind, `${path}.kind`) }),
     ...(value.emphasis === undefined ? {} : { emphasis: enumValue(value.emphasis, ["primary", "secondary"], `${path}.emphasis`) as "primary" | "secondary" })
@@ -182,7 +191,7 @@ function normalizeInteractions(input: unknown, entityIds: Set<string>): Scientif
     return {
       id: stableId(value.id, `${path}.id`),
       sourceId,
-      type: enumValue(value.type, ["activates", "inhibits", "binds_to", "transports_to", "converts_to", "associates_with"], `${path}.type`) as ScientificInteractionType,
+      type: enumValue(value.type, ["activates", "inhibits", "binds_to", "transports_to", "converts_to", "associates_with", "regulates", "contains", "measures", "flows_to", "illuminates", "captures"], `${path}.type`) as ScientificInteractionType,
       targetId,
       ...(value.label === undefined ? {} : { label: textValue(value.label, `${path}.label`, 160) })
     };

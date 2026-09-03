@@ -44,6 +44,8 @@ import { placePathMarkers } from "../core/pathMarkers.js";
 import { compileScientificPlot } from "../core/scientificPlot.js";
 import { generateScientificImage } from "../scientific/imageGenerator.js";
 import { generateScientificFigureProject } from "../scientific/figureProjectGenerator.js";
+import { planScientificPromptFigure } from "../scientific/promptFigureWorkflow.js";
+import { approveScientificFigureBrief, approveScientificFigureFinal } from "../scientific/figureProject.js";
 import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 export interface ServerOptions {
@@ -322,6 +324,29 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse, 
       analysisJson: generated.analysisJson, svg: generated.svg, latex: generated.latex, pngBase64: generated.png.toString("base64"), pdfBase64: generated.pdf.toString("base64")
     });
     return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/prompt-plan") {
+    const body = objectBody(await readJson(request));
+    const generated = await planScientificPromptFigure(body.request, { registryRoot: resolve(root, "publication-figure-registry", "v1") });
+    writeJson(response, 200, {
+      ok: true, status: generated.status, nextGate: generated.nextGate, request: generated.request, requestDigest: generated.requestDigest,
+      planner: generated.planner, presentationRetrieval: generated.presentationRetrieval, project: generated.project, semanticDigest: generated.semanticDigest, qa: generated.qa,
+      preview: generated.preview ? { manifest: generated.preview.manifest, intermediate: generated.preview.intermediate, scene: generated.preview.scene, svg: generated.preview.svg, latex: generated.preview.latex, pngBase64: generated.preview.png.png.toString("base64") } : undefined
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/approve-brief") {
+    const body = objectBody(await readJson(request)); const reviewer = optionalStringBodyValue(body.reviewer, "reviewer"), reviewedAt = optionalStringBodyValue(body.reviewedAt, "reviewedAt");
+    if (!reviewer || !reviewedAt) throw new ValidationError("approve-brief requires reviewer and reviewedAt");
+    writeJson(response, 200, { ok: true, project: approveScientificFigureBrief(body.project, reviewer, reviewedAt) }); return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/scientific/approve-final") {
+    const body = objectBody(await readJson(request)); const reviewer = optionalStringBodyValue(body.reviewer, "reviewer"), reviewedAt = optionalStringBodyValue(body.reviewedAt, "reviewedAt");
+    if (!reviewer || !reviewedAt) throw new ValidationError("approve-final requires reviewer and reviewedAt");
+    writeJson(response, 200, { ok: true, project: approveScientificFigureFinal(body.project, body.evidence as Parameters<typeof approveScientificFigureFinal>[1], reviewer, reviewedAt) }); return;
   }
 
   if (method === "POST" && url.pathname === "/v1/proposal/visuals") {
