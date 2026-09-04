@@ -18,6 +18,21 @@ test("reviewArtworkQuality passes a rich recognizable object scene", () => {
   assert.equal(review.checks.some((check) => check.id === "visual-richness" && check.status === "pass"), true);
 });
 
+test("a subject label cannot change the verdict for an already rich scene", () => {
+  const labeled = catScene();
+  labeled.elements.push({ type: "text", name: "subject-label", x: 40, y: 45, text: "cat", size: 18, style: { fill: "#111111", stroke: null } });
+  const synonym = structuredClone(labeled);
+  const synonymLabel = synonym.elements.at(-1);
+  if (synonymLabel?.type === "text") synonymLabel.text = "unit";
+
+  const targetReview = reviewArtworkQuality({ prompt: "full cat icon", target: "cat", scene: labeled, exportQa: svgExportQa({ vectorElementCount: 15 }) });
+  const synonymReview = reviewArtworkQuality({ prompt: "full cat icon", target: "cat", scene: synonym, exportQa: svgExportQa({ vectorElementCount: 15 }) });
+
+  assert.equal(targetReview.ok, true);
+  assert.equal(targetReview.ok, synonymReview.ok);
+  assert.equal(targetReview.checks.find((check) => check.id === "text-reliance")?.status, "pass");
+});
+
 test("reviewArtworkQuality rejects sparse label-driven object scenes", () => {
   const review = reviewArtworkQuality({
     prompt: "full cat icon",
@@ -33,7 +48,7 @@ test("reviewArtworkQuality rejects sparse label-driven object scenes", () => {
   });
 
   assert.equal(review.ok, false);
-  assert.match(review.issues.join("\n"), /text spelling out cat/);
+  assert.match(review.issues.join("\n"), /text spelling out cat without enough supporting vector structure/);
   assert.match(review.nextGoalPrompt ?? "", /Make the cat recognizable/);
   assert.match(review.nextGoalPrompt ?? "", /concrete named vector elements/);
 });

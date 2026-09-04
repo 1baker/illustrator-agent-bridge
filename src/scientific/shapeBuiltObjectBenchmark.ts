@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { normalizeScene } from "../core/sceneValidation.js";
 import type { PathPoint, Point, ScientificObject, VectorElement, VectorScene, VectorStyle } from "../core/vectorScene.js";
+import { renderSceneToPng } from "../render/pngRenderer.js";
+import { renderSceneToSvg } from "../render/svgRenderer.js";
+import { renderSceneToTikz } from "../render/tikzRenderer.js";
 import { canonicalJson } from "./figureProject.js";
+import { assertSemanticStateUnchanged, createImmutableApprovalPreimage, digestValue, evaluateVisualQuality, semanticStateFromScene, verifyImmutableApprovalPreimage, type ImmutableVectorApprovalPreimage, type VisualQualityMetrics } from "./vectorRefinementEngine.js";
 
 export type BenchmarkColorway = "ocean" | "mineral" | "plum";
 
@@ -87,6 +91,15 @@ export interface ShapeBuiltLifelikeApproval {
   reviewer: string;
   reviewedAt: string;
   scope: "lifelike_vector_refinement";
+  approvedBaseline: {
+    program: ShapeBuiltObjectProgram;
+    sceneJson: string;
+    svg: string;
+    tikz: string;
+    pngDigest: string;
+    preimage: ImmutableVectorApprovalPreimage;
+    preimageDigest: string;
+  };
 }
 
 export interface ShapeBuiltLifelikeCandidate {
@@ -95,18 +108,17 @@ export interface ShapeBuiltLifelikeCandidate {
   score: number;
   scoreBreakdown: {
     semanticVectorFitness: number;
-    slabDimensionality: number;
-    lamellaDimensionality: number;
-    lightModel: number;
-    surfaceFinish: number;
-    editableConstruction: number;
+    sceneMeasuredVisualQuality: number;
+    complexityPenalty: number;
+    hardFailurePenalty: number;
   };
+  visualQuality: VisualQualityMetrics;
 }
 
 export interface ShapeBuiltLifelikeOptimizationStep {
   generation: number;
   parentProgramDigest: string;
-  evaluated: Array<{ mutation: string; program: ShapeBuiltLifelikeProgram; programDigest: string; score: number; accepted: boolean }>;
+  evaluated: Array<{ mutation: string; parentProgramDigest: string; program: ShapeBuiltLifelikeProgram; programDigest: string; score: number; hardFailures: string[]; eligible: boolean; accepted: boolean }>;
   acceptedMutation: string | null;
   winner: ShapeBuiltLifelikeCandidate;
 }
@@ -232,42 +244,74 @@ const FLAT_LIFELIKE_CONTROLS: LifelikeVectorControls = {
   rimLightOpacity: 0,
   microtextureOpacity: 0
 };
+const SHAPE_BUILT_GENERATOR_VERSION = "shape-built-object.v2";
+const SHAPE_BUILT_RENDERER_VERSION = "vector-scene-svg-tikz-png.v1";
+const SHAPE_BUILT_MUTATION_POLICY = "relative-diverse-presentation-search.v1";
 
 /** Bind the user's approval to the exact third-generation Candidate B program. */
 export function approveCandidateBLifelikeRefinement(reviewer: string, reviewedAt: string): ShapeBuiltLifelikeApproval {
   if (!reviewer.trim()) throw new Error("lifelike refinement approval requires a reviewer");
   if (!Number.isFinite(Date.parse(reviewedAt))) throw new Error("lifelike refinement approval requires an ISO timestamp");
   const baseline = candidateBGenerationThreeProgram();
+  const scene = composeSemicrystallineFilmScene(baseline);
+  const sceneJson = canonicalJson(scene);
+  const svg = renderSceneToSvg(scene);
+  const tikz = renderSceneToTikz(scene).latex;
+  const png = renderSceneToPng(scene, { width: 1200 }).png;
+  const semanticState = semanticStateFromScene(scene, { briefDigest: digestValue({ prompt: DEFAULT_PROMPT }), evidenceDigests: [], sourceDataDigests: [] });
+  const preimage = createImmutableApprovalPreimage({
+    semanticStateDigest: digestValue(semanticState),
+    presentationStateDigest: digestValue(FLAT_LIFELIKE_CONTROLS),
+    semanticSceneDigest: createHash("sha256").update(sceneJson).digest("hex"),
+    svgDigest: digestValue(svg),
+    tikzDigest: digestValue(tikz),
+    pngDigest: createHash("sha256").update(png).digest("hex"),
+    generatorVersion: SHAPE_BUILT_GENERATOR_VERSION,
+    rendererVersion: SHAPE_BUILT_RENDERER_VERSION,
+    mutationPolicyDigest: digestValue(SHAPE_BUILT_MUTATION_POLICY),
+    fontPolicyDigest: digestValue({ font: "Arial", labels: "component_labels_only" }),
+    runtimeManifestDigest: digestValue({ node: process.versions.node, sceneSchema: "VectorScene.v1" })
+  });
   return {
     schemaVersion: "ShapeBuiltLifelikeApproval.v1",
     baselineId: baseline.id,
     baselineProgramDigest: shapeBuiltProgramDigest(baseline),
     reviewer: reviewer.trim(),
     reviewedAt: new Date(reviewedAt).toISOString(),
-    scope: "lifelike_vector_refinement"
+    scope: "lifelike_vector_refinement",
+    approvedBaseline: { program: baseline, sceneJson, svg, tikz, pngDigest: preimage.pngDigest, preimage, preimageDigest: digestValue(preimage) }
   };
 }
 
-/** Run a target-free hill climb over declared dimensional vector controls. */
+/** Run a target-free deterministic beam search over declared dimensional vector controls. */
 export function optimizeCandidateBLifelikeRefinement(approval: ShapeBuiltLifelikeApproval, generations = 7): ShapeBuiltLifelikeOptimizationRun {
   if (!Number.isInteger(generations) || generations < 1 || generations > 10) throw new Error("lifelike optimization generations must be between 1 and 10");
-  const approvedBase = candidateBGenerationThreeProgram();
+  const approvedBase = approval.approvedBaseline.program;
+  verifyImmutableApprovalPreimage(approval.approvedBaseline.preimageDigest, approval.approvedBaseline.preimage);
   if (approval.baselineId !== approvedBase.id || approval.baselineProgramDigest !== shapeBuiltProgramDigest(approvedBase)) throw new Error("lifelike refinement approval digest is stale");
+  const approvedScene = JSON.parse(approval.approvedBaseline.sceneJson) as VectorScene;
+  if (createHash("sha256").update(approval.approvedBaseline.sceneJson).digest("hex") !== approval.approvedBaseline.preimage.semanticSceneDigest || digestValue(approval.approvedBaseline.svg) !== approval.approvedBaseline.preimage.svgDigest || digestValue(approval.approvedBaseline.tikz) !== approval.approvedBaseline.preimage.tikzDigest || approval.approvedBaseline.pngDigest !== approval.approvedBaseline.preimage.pngDigest) throw new Error("approved baseline artifact digest is stale");
   const initialProgram: ShapeBuiltLifelikeProgram = { id: `${approvedBase.id}.lifelike-flat`, baseProgram: approvedBase, controls: { ...FLAT_LIFELIKE_CONTROLS } };
-  const baseline = scoreLifelikeCandidate(initialProgram);
+  const baseline = scoreLifelikeCandidate(initialProgram, approvedScene);
   let winner = baseline;
+  let beam = [baseline];
   const steps: ShapeBuiltLifelikeOptimizationStep[] = [];
   for (let generation = 1; generation <= generations; generation += 1) {
-    const parentDigest = shapeBuiltLifelikeProgramDigest(winner.program);
-    const evaluatedCandidates = lifelikeMutationsFor(winner.program, generation).map(({ mutation, program }) => ({ mutation, candidate: scoreLifelikeCandidate(program) }));
-    const best = [...evaluatedCandidates].sort((left, right) => right.candidate.score - left.candidate.score || left.mutation.localeCompare(right.mutation))[0]!;
-    const accepted = best.candidate.score > winner.score;
-    if (accepted) winner = best.candidate;
+    const previousWinnerDigest = shapeBuiltLifelikeProgramDigest(winner.program);
+    const evaluatedCandidates = beam.flatMap((parent) => {
+      const parentProgramDigest = shapeBuiltLifelikeProgramDigest(parent.program);
+      return lifelikeMutationsFor(parent.program, generation).map(({ mutation, program }) => ({ mutation, parentProgramDigest, candidate: scoreLifelikeCandidate(program) }));
+    });
+    const eligibleCandidates = evaluatedCandidates.filter((item) => item.candidate.visualQuality.hardFailures.length === 0);
+    const best = [...eligibleCandidates].sort((left, right) => right.candidate.score - left.candidate.score || left.mutation.localeCompare(right.mutation))[0];
+    const accepted = best !== undefined && best.candidate.score > winner.score;
+    if (accepted && best) winner = best.candidate;
+    beam = retainDiverseBeam([winner, ...eligibleCandidates.map((item) => item.candidate)], 4);
     steps.push({
       generation,
-      parentProgramDigest: parentDigest,
-      evaluated: evaluatedCandidates.map(({ mutation, candidate }) => ({ mutation, program: candidate.program, programDigest: shapeBuiltLifelikeProgramDigest(candidate.program), score: candidate.score, accepted: accepted && mutation === best.mutation })),
-      acceptedMutation: accepted ? best.mutation : null,
+      parentProgramDigest: accepted && best ? best.parentProgramDigest : previousWinnerDigest,
+      evaluated: evaluatedCandidates.map(({ mutation, parentProgramDigest, candidate }) => ({ mutation, parentProgramDigest, program: candidate.program, programDigest: shapeBuiltLifelikeProgramDigest(candidate.program), score: candidate.score, hardFailures: candidate.visualQuality.hardFailures, eligible: candidate.visualQuality.hardFailures.length === 0, accepted: accepted && best !== undefined && mutation === best.mutation && parentProgramDigest === best.parentProgramDigest })),
+      acceptedMutation: accepted && best ? best.mutation : null,
       winner
     });
   }
@@ -507,7 +551,7 @@ export function composeLifelikeSemicrystallineFilmScene(program: ShapeBuiltLifel
   const semantics = base.semantics === undefined ? undefined : {
     objects: cueIds.length === 0 ? base.semantics.objects : [
       ...base.semantics.objects,
-      { id: "dimensional-vector-cues", kind: "editable_dimensional_cues", label: "Editable lighting and extrusion cues", elementIds: cueIds, properties: { referencePolicy: "general_visual_traits_only", rasterEffects: false } }
+      { id: "dimensional-vector-cues", kind: "editable_dimensional_cues", label: "Editable lighting and extrusion cues", elementIds: cueIds, properties: { referencePolicy: "general_visual_traits_only", rasterEffects: false, decorative: true } }
     ],
     relationships: cueIds.length === 0 ? (base.semantics.relationships ?? []) : [
       ...(base.semantics.relationships ?? []),
@@ -540,20 +584,23 @@ export function composeLifelikeSemicrystallineFilmScene(program: ShapeBuiltLifel
   });
 }
 
-function scoreLifelikeCandidate(program: ShapeBuiltLifelikeProgram): ShapeBuiltLifelikeCandidate {
-  const scene = composeLifelikeSemicrystallineFilmScene(program);
-  const base = scoreCandidate(program.baseProgram, composeSemicrystallineFilmScene(program.baseProgram));
-  const c = program.controls;
-  const targetScore = (value: number, target: number, points: number) => Math.max(0, points * (1 - Math.abs(value - target) / target));
+function scoreLifelikeCandidate(program: ShapeBuiltLifelikeProgram, exactScene?: VectorScene): ShapeBuiltLifelikeCandidate {
+  const baseScene = exactScene ?? composeSemicrystallineFilmScene(program.baseProgram);
+  const scene = exactScene ?? composeLifelikeSemicrystallineFilmScene(program);
+  const base = scoreCandidate(program.baseProgram, baseScene);
+  const provenance = { briefDigest: digestValue({ prompt: DEFAULT_PROMPT }), evidenceDigests: [] as string[], sourceDataDigests: [] as string[] };
+  assertSemanticStateUnchanged(semanticStateFromScene(baseScene, provenance), semanticStateFromScene(scene, provenance));
+  const visualQuality = evaluateVisualQuality(scene);
+  const complexityPenalty = Number(Math.max(0, (scene.elements.length - baseScene.elements.length - 36) * 0.08).toFixed(3));
+  const hardFailurePenalty = visualQuality.hardFailures.length * 20;
   const scoreBreakdown = {
     semanticVectorFitness: base.score,
-    slabDimensionality: targetScore(c.perspectiveDepth, 24, 20) + targetScore(c.faceContrast, 0.72, 10),
-    lamellaDimensionality: targetScore(c.lamellaExtrusionDepth, 12, 16),
-    lightModel: targetScore(c.contactShadowOpacity, 18, 12) + targetScore(c.highlightOpacity, 44, 12),
-    surfaceFinish: targetScore(c.rimLightOpacity, 38, 8) + targetScore(c.microtextureOpacity, 9, 8),
-    editableConstruction: 14
+    sceneMeasuredVisualQuality: visualQuality.score,
+    complexityPenalty,
+    hardFailurePenalty
   };
-  return { program, scene, scoreBreakdown, score: Number(Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0).toFixed(3)) };
+  const score = Number((base.score + visualQuality.score - complexityPenalty - hardFailurePenalty).toFixed(3));
+  return { program, scene, scoreBreakdown, visualQuality, score };
 }
 
 function lifelikeMutationsFor(parent: ShapeBuiltLifelikeProgram, generation: number): Array<{ mutation: string; program: ShapeBuiltLifelikeProgram }> {
@@ -561,15 +608,43 @@ function lifelikeMutationsFor(parent: ShapeBuiltLifelikeProgram, generation: num
     mutation,
     program: { ...parent, id: `${parent.id}.g${generation}-${mutation}`, controls: { ...parent.controls, ...changes } }
   });
+  const c = parent.controls;
   return [
-    mutate("add-slab-perspective", { perspectiveDepth: 24 }),
-    mutate("extrude-crystalline-lamellae", { lamellaExtrusionDepth: 12 }),
-    mutate("add-contact-occlusion", { contactShadowOpacity: 18 }),
-    mutate("add-specular-highlights", { highlightOpacity: 44 }),
-    mutate("differentiate-material-faces", { faceContrast: 0.72 }),
-    mutate("add-restrained-surface-texture", { microtextureOpacity: 9 }),
-    mutate("add-rim-light", { rimLightOpacity: 38 })
+    mutate("increase-slab-perspective", { perspectiveDepth: Number(Math.min(36, c.perspectiveDepth + 12).toFixed(2)) }),
+    mutate("decrease-slab-perspective", { perspectiveDepth: Number(Math.max(0, c.perspectiveDepth - 12).toFixed(2)) }),
+    mutate("increase-lamella-extrusion", { lamellaExtrusionDepth: Number(Math.min(18, c.lamellaExtrusionDepth + 6).toFixed(2)) }),
+    mutate("decrease-lamella-extrusion", { lamellaExtrusionDepth: Number(Math.max(0, c.lamellaExtrusionDepth - 6).toFixed(2)) }),
+    mutate("increase-contact-occlusion", { contactShadowOpacity: Number(Math.min(30, c.contactShadowOpacity + 8).toFixed(2)) }),
+    mutate("decrease-contact-occlusion", { contactShadowOpacity: Number(Math.max(0, c.contactShadowOpacity - 8).toFixed(2)) }),
+    mutate("increase-specular-highlights", { highlightOpacity: Number(Math.min(70, c.highlightOpacity + 22).toFixed(2)) }),
+    mutate("decrease-specular-highlights", { highlightOpacity: Number(Math.max(0, c.highlightOpacity - 22).toFixed(2)) }),
+    mutate("increase-material-face-contrast", { faceContrast: Number(Math.min(1, c.faceContrast + 0.18).toFixed(2)) }),
+    mutate("decrease-material-face-contrast", { faceContrast: Number(Math.max(0, c.faceContrast - 0.18).toFixed(2)) }),
+    mutate("increase-surface-texture", { microtextureOpacity: Number(Math.min(20, c.microtextureOpacity + 6).toFixed(2)) }),
+    mutate("decrease-surface-texture", { microtextureOpacity: Number(Math.max(0, c.microtextureOpacity - 6).toFixed(2)) }),
+    mutate("increase-rim-light", { rimLightOpacity: Number(Math.min(60, c.rimLightOpacity + 20).toFixed(2)) }),
+    mutate("decrease-rim-light", { rimLightOpacity: Number(Math.max(0, c.rimLightOpacity - 20).toFixed(2)) }),
+    mutate("no-op", {})
   ];
+}
+
+function retainDiverseBeam(candidates: ShapeBuiltLifelikeCandidate[], width: number): ShapeBuiltLifelikeCandidate[] {
+  const unique = new Map<string, ShapeBuiltLifelikeCandidate>();
+  for (const candidate of candidates) unique.set(shapeBuiltLifelikeProgramDigest(candidate.program), candidate);
+  const ordered = [...unique.values()].sort((left, right) => right.score - left.score || shapeBuiltLifelikeProgramDigest(left.program).localeCompare(shapeBuiltLifelikeProgramDigest(right.program)));
+  const selected: ShapeBuiltLifelikeCandidate[] = [];
+  const signatures = new Set<string>();
+  for (const candidate of ordered) {
+    const c = candidate.program.controls;
+    const signature = [c.perspectiveDepth > 0, c.lamellaExtrusionDepth > 0, c.contactShadowOpacity > 0, c.highlightOpacity > 0, c.microtextureOpacity > 0, c.rimLightOpacity > 0].join(":");
+    if (!signatures.has(signature) || selected.length === 0) { selected.push(candidate); signatures.add(signature); }
+    if (selected.length === width) break;
+  }
+  for (const candidate of ordered) {
+    if (selected.length === width) break;
+    if (!selected.includes(candidate)) selected.push(candidate);
+  }
+  return selected;
 }
 
 function validateLifelikeControls(controls: LifelikeVectorControls): void {

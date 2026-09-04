@@ -172,8 +172,8 @@ function checkTextReliance(textElements: Array<Extract<SceneElement, { type: "te
   const visualNonTextCount = visualElements.filter((element) => element.type !== "text").length;
   const targetText = target ? textElements.filter((element) => new RegExp(`\\b${escapeRegex(target)}\\b`, "i").test(element.text)) : [];
 
-  if (targetText.length > 0) {
-    return fail("text-reliance", `The artwork includes text spelling out ${target}; the object should be recognizable from shapes, not labels.`);
+  if (targetText.length > 0 && visualNonTextCount < 4) {
+    return fail("text-reliance", `The artwork includes text spelling out ${target} without enough supporting vector structure; the object should be recognizable from shapes, not labels.`);
   }
 
   if (textElements.length > 0 && visualNonTextCount < 4) {
@@ -184,7 +184,7 @@ function checkTextReliance(textElements: Array<Extract<SceneElement, { type: "te
     return warn("text-reliance", "The scene has many text labels relative to visual parts; reduce label reliance or add stronger shapes.");
   }
 
-  return pass("text-reliance", textElements.length === 0 ? "The scene does not rely on text labels." : "Text labels are supported by enough visible vector artwork.");
+  return pass("text-reliance", textElements.length === 0 ? "The scene does not rely on text labels." : "Text labels, including any subject label, are supported by enough visible vector artwork.");
 }
 
 function checkFraming(document: Box, visualBounds: Box | undefined): ArtworkReviewCheck {

@@ -50,8 +50,29 @@ After approving the third-generation Candidate B direction, run
 without raster painting: separate top/front/side faces, extruded lamella facets,
 contact shadows, specular highlights, rim light, and sparse surface texture.
 Each feature remains a named path or polygon controlled by bounded numeric
-state. The scorer rewards the declared dimensional construction targets and
-retains only improving mutations.
+state. A deterministic beam search evaluates relative increase, decrease, and
+no-op mutations. It retains an improving winner while preserving diverse
+alternatives and records rejected proposals and their actual parent digests.
+
+Fitness is measured independently from mutation targets. The evaluator inspects
+semantic visibility, vector and relationship coverage, whitespace balance,
+depth-cue families, clipped texture, stroke consistency, label collisions,
+off-canvas geometry, shadow attachment, and light/shadow z-order. Structural
+failures are explicit. A generic depiction grammar applies the same vector-only
+presentation layer to shells, membranes, slabs, filaments, porous networks,
+particle populations, vessels, cutaways, and interfaces without importing
+subject-specific claims.
+
+Hard failures are lexicographic gates, not soft penalties: an ineligible
+proposal is excluded before scalar fitness comparison, so decorative gains
+cannot compensate for hidden semantics, missing relationship geometry,
+clipping loss, off-canvas content, broken lighting order, or raster embedding.
+
+The approved baseline is replayed from its exact stored scene and artifact
+bytes rather than being regenerated. The approval preimage binds semantic and
+presentation state, scene, SVG, TikZ, PNG, generator, renderer, mutation policy,
+font policy, and runtime digests. Any change fails closed. Scientific semantics
+remain immutable while presentation state is refined.
 
 FigureLabs' public examples were reviewed solely to identify broad quality
 traits such as layered volume, soft occlusion, restrained gradients, and sparse
