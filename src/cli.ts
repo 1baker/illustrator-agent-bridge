@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
@@ -71,6 +72,7 @@ import { generateScientificImage } from "./scientific/imageGenerator.js";
 import { generateScientificFigureProject } from "./scientific/figureProjectGenerator.js";
 import { approveScientificFigureBrief, approveScientificFigureFinal, normalizeScientificFigureProject, semanticFigureDigest, type ScientificFigureFinalApprovalEvidence } from "./scientific/figureProject.js";
 import { planScientificPromptFigure } from "./scientific/promptFigureWorkflow.js";
+import { approveCandidateBLifelikeRefinement, approveShapeBuiltDirection, generateShapeBuiltScientificObjectBenchmark, optimizeCandidateBLifelikeRefinement, optimizeShapeBuiltScientificObject, shapeBuiltLifelikeProgramDigest, shapeBuiltProgramDigest } from "./scientific/shapeBuiltObjectBenchmark.js";
 import { promotePublicationFigure, rebuildPublicationFigureRegistry, searchPublicationFigureRegistry, type RegistryPromotionInput } from "./registry/publicationFigureRegistry.js";
 import {
   generateProposalVisualPackage,
@@ -138,6 +140,15 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "scientific:prompt-plan":
       await planPromptFigure(rest);
+      return;
+    case "scientific:shape-benchmark":
+      await generateShapeBenchmark(rest);
+      return;
+    case "scientific:shape-loop":
+      await runShapeOptimizationLoop(rest);
+      return;
+    case "scientific:lifelike-loop":
+      await runLifelikeShapeOptimizationLoop(rest);
       return;
     case "scientific:approve-brief":
       await approveFigureBrief(rest);
@@ -610,6 +621,155 @@ async function planPromptFigure(args: string[]): Promise<void> {
     if (compiled && paths.pdf) await writeFile(paths.pdf, compiled.pdf);
   }
   console.log(JSON.stringify({ ok: true, status: result.status, nextGate: result.nextGate, requestDigest: result.requestDigest, semanticDigest: result.semanticDigest, qa: result.qa, paths }, null, 2));
+}
+
+async function generateShapeBenchmark(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/shape-built-scientific-object");
+  const benchmark = generateShapeBuiltScientificObjectBenchmark(optionValue(options, "prompt"));
+  await mkdir(outputDir, { recursive: true });
+  const rendered = benchmark.candidates.map((candidate) => ({
+    candidate,
+    svg: renderSceneToSvg(candidate.scene),
+    png: renderSceneToPng(candidate.scene, { width: 1200 }),
+    tikz: renderSceneToTikz(candidate.scene)
+  }));
+  await Promise.all(rendered.flatMap(({ candidate, svg, png, tikz }) => {
+    const prefix = resolve(outputDir, candidate.program.id);
+    return [
+      writeFile(`${prefix}.scene.json`, `${JSON.stringify(candidate.scene, null, 2)}\n`, "utf8"),
+      writeFile(`${prefix}.svg`, svg, "utf8"),
+      writeFile(`${prefix}.png`, png.png),
+      writeFile(`${prefix}.tex`, tikz.latex, "utf8")
+    ];
+  }));
+  const ledger = {
+    schemaVersion: benchmark.schemaVersion,
+    prompt: benchmark.prompt,
+    targetImageUsed: benchmark.targetImageUsed,
+    objective: benchmark.objective,
+    constructionRules: benchmark.constructionRules,
+    selectedCandidateId: benchmark.selectedCandidateId,
+    approval: benchmark.approval,
+    candidates: benchmark.candidates.map(({ scene, ...candidate }) => ({
+      ...candidate,
+      metrics: {
+        elements: scene.elements.length,
+        objects: scene.semantics?.objects.length ?? 0,
+        relationships: scene.semantics?.relationships?.length ?? 0,
+        paths: scene.elements.filter((element) => element.type === "path").length,
+        polygons: scene.elements.filter((element) => element.type === "polygon").length,
+        ellipses: scene.elements.filter((element) => element.type === "ellipse").length
+      },
+      artifacts: { scene: `${candidate.program.id}.scene.json`, svg: `${candidate.program.id}.svg`, png: `${candidate.program.id}.png`, tikz: `${candidate.program.id}.tex` }
+    }))
+  };
+  const reviewHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shape-built scientific object benchmark</title><style>body{margin:0;background:#edf1f4;color:#172033;font-family:Arial,sans-serif}main{max-width:1440px;margin:auto;padding:34px}h1{font-size:28px;margin:0 0 8px}p{color:#536273;line-height:1.45}.notice{background:#fff8df;border-left:5px solid #d59a24;padding:12px 16px;margin:22px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:24px}.card{background:white;border:1px solid #cbd5df;border-radius:10px;overflow:hidden;box-shadow:0 5px 18px #24334818}.card h2{font-size:17px;margin:0;padding:15px 18px 4px}.meta{font-size:13px;padding:0 18px 13px;color:#667582}.figure{border-top:1px solid #e3e8ed;background:#fcfdfe}.figure svg{display:block;width:100%;height:auto}.selected{outline:3px solid #326d7c}.files{font-size:12px;padding:12px 18px;background:#f7f9fa}</style></head><body><main><h1>Shape-built scientific object benchmark</h1><p>${escapeHtmlForReview(benchmark.prompt)}</p><div class="notice"><strong>Review gate:</strong> no target image was used. The score checks construction and semantic properties; it does not approve visual quality. Please choose a direction or request changes.</div><div class="grid">${rendered.map(({ candidate, svg }) => `<section class="card ${candidate.program.id === benchmark.selectedCandidateId ? "selected" : ""}"><h2>${escapeHtmlForReview(candidate.program.id)}${candidate.program.id === benchmark.selectedCandidateId ? " — software-selected" : ""}</h2><div class="meta">score ${candidate.score.toFixed(1)} · ${candidate.program.colorway} · ${candidate.program.lamellaCount} lamellae · ${candidate.program.amorphousChainCount} amorphous chains · ${candidate.program.tieChainCount} tie chains</div><div class="figure">${svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div><div class="files">Editable sources: SVG · TikZ · semantic scene JSON; PNG is derived.</div></section>`).join("")}</div></main></body></html>`;
+  const ledgerPath = resolve(outputDir, "construction-ledger.json");
+  const reviewPath = resolve(outputDir, "review.html");
+  await Promise.all([writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, "utf8"), writeFile(reviewPath, reviewHtml, "utf8")]);
+  console.log(JSON.stringify({ ok: true, outputDir, reviewPath, ledgerPath, selectedCandidateId: benchmark.selectedCandidateId, approval: benchmark.approval, candidateCount: benchmark.candidates.length }, null, 2));
+}
+
+function escapeHtmlForReview(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+async function runShapeOptimizationLoop(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const candidateId = optionValue(options, "baseline") ?? "candidate-b-ordered";
+  const reviewer = optionValue(options, "reviewer") ?? "user";
+  const reviewedAt = optionValue(options, "approved-at") ?? new Date().toISOString();
+  const generations = Number(optionValue(options, "generations") ?? "3");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/shape-built-candidate-b-loop");
+  const approval = approveShapeBuiltDirection(candidateId, reviewer, reviewedAt);
+  const run = optimizeShapeBuiltScientificObject(approval, generations);
+  await mkdir(outputDir, { recursive: true });
+  const stages = [{ id: "baseline", candidate: run.baseline, mutation: "User-approved direction" }, ...run.steps.map((step) => ({ id: `generation-${step.generation}`, candidate: step.winner, mutation: step.acceptedMutation ?? "No improving mutation" }))];
+  const rendered = stages.map((stage) => ({ ...stage, svg: renderSceneToSvg(stage.candidate.scene), png: renderSceneToPng(stage.candidate.scene, { width: 1200 }), tikz: renderSceneToTikz(stage.candidate.scene) }));
+  await Promise.all(rendered.flatMap((stage) => {
+    const prefix = resolve(outputDir, stage.id);
+    return [
+      writeFile(`${prefix}.scene.json`, `${JSON.stringify(stage.candidate.scene, null, 2)}\n`, "utf8"),
+      writeFile(`${prefix}.svg`, stage.svg, "utf8"),
+      writeFile(`${prefix}.png`, stage.png.png),
+      writeFile(`${prefix}.tex`, stage.tikz.latex, "utf8")
+    ];
+  }));
+  const compactCandidate = (candidate: typeof run.baseline) => ({ program: candidate.program, programDigest: shapeBuiltProgramDigest(candidate.program), score: candidate.score, scoreBreakdown: candidate.scoreBreakdown });
+  const lineage = {
+    schemaVersion: run.schemaVersion,
+    approval: run.approval,
+    objective: run.objective,
+    baseline: compactCandidate(run.baseline),
+    steps: run.steps.map((step) => ({ generation: step.generation, parentProgramDigest: step.parentProgramDigest, acceptedMutation: step.acceptedMutation, winner: compactCandidate(step.winner), evaluated: step.evaluated })),
+    final: compactCandidate(run.final),
+    finalApproval: run.finalApproval
+  };
+  const approvalPath = resolve(outputDir, "direction-approval.json");
+  const lineagePath = resolve(outputDir, "optimization-lineage.json");
+  const reviewPath = resolve(outputDir, "review.html");
+  const reviewHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Candidate B autonomous vector loop</title><style>body{margin:0;background:#edf1f4;color:#172033;font-family:Arial,sans-serif}main{max-width:1380px;margin:auto;padding:34px}h1{margin:0 0 8px}.notice{background:#eef7f5;border-left:5px solid #38776d;padding:12px 16px;margin:22px 0;color:#34534f}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(570px,1fr));gap:24px}.card{background:white;border:1px solid #cbd5df;border-radius:10px;overflow:hidden;box-shadow:0 5px 18px #24334818}.card h2{font-size:17px;margin:0;padding:15px 18px 4px}.meta{font-size:13px;padding:0 18px 13px;color:#667582}.figure svg{display:block;width:100%;height:auto;border-top:1px solid #e3e8ed}.final{outline:3px solid #38776d}</style></head><body><main><h1>Candidate B: autonomous mutable-vector loop</h1><p>Candidate B is locked by SHA-256 as the approved direction. Each generation changed one explicit program property and retained it only when semantic-vector fitness improved.</p><div class="notice"><strong>Final artwork is still pending human review.</strong> The loop can optimize declared constraints; it cannot declare its own aesthetic success.</div><div class="grid">${rendered.map((stage, index) => `<section class="card ${index === rendered.length - 1 ? "final" : ""}"><h2>${escapeHtmlForReview(stage.id)}${index === rendered.length - 1 ? " — current winner" : ""}</h2><div class="meta">${escapeHtmlForReview(stage.mutation)} · score ${stage.candidate.score.toFixed(2)} · program digest ${shapeBuiltProgramDigest(stage.candidate.program).slice(0, 12)}</div><div class="figure">${stage.svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div></section>`).join("")}</div></main></body></html>`;
+  await Promise.all([writeFile(approvalPath, `${JSON.stringify(approval, null, 2)}\n`, "utf8"), writeFile(lineagePath, `${JSON.stringify(lineage, null, 2)}\n`, "utf8"), writeFile(reviewPath, reviewHtml, "utf8")]);
+  console.log(JSON.stringify({ ok: true, outputDir, approvalPath, lineagePath, reviewPath, baselineScore: run.baseline.score, finalScore: run.final.score, acceptedMutations: run.steps.map((step) => step.acceptedMutation), finalApproval: run.finalApproval }, null, 2));
+}
+
+async function runLifelikeShapeOptimizationLoop(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const reviewer = optionValue(options, "reviewer") ?? "user";
+  const reviewedAt = optionValue(options, "approved-at") ?? new Date().toISOString();
+  const generations = Number(optionValue(options, "generations") ?? "7");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/shape-built-candidate-b-lifelike-loop");
+  const approval = approveCandidateBLifelikeRefinement(reviewer, reviewedAt);
+  const run = optimizeCandidateBLifelikeRefinement(approval, generations);
+  await mkdir(outputDir, { recursive: true });
+  const stages = [
+    { id: "baseline-approved-b", candidate: run.baseline, mutation: "Approved Candidate B generation 3" },
+    ...run.steps.map((step) => ({ id: `generation-${step.generation}`, candidate: step.winner, mutation: step.acceptedMutation ?? "No improving mutation" }))
+  ];
+  const rendered = stages.map((stage) => ({ ...stage, svg: renderSceneToSvg(stage.candidate.scene), png: renderSceneToPng(stage.candidate.scene, { width: 1200 }), tikz: renderSceneToTikz(stage.candidate.scene) }));
+  await Promise.all(rendered.flatMap((stage) => {
+    const prefix = resolve(outputDir, stage.id);
+    return [
+      writeFile(`${prefix}.scene.json`, `${JSON.stringify(stage.candidate.scene, null, 2)}\n`, "utf8"),
+      writeFile(`${prefix}.svg`, stage.svg, "utf8"),
+      writeFile(`${prefix}.png`, stage.png.png),
+      writeFile(`${prefix}.tex`, stage.tikz.latex, "utf8")
+    ];
+  }));
+  const compactCandidate = (candidate: typeof run.baseline) => ({ program: candidate.program, programDigest: shapeBuiltLifelikeProgramDigest(candidate.program), score: candidate.score, scoreBreakdown: candidate.scoreBreakdown });
+  const first = rendered[0]!;
+  const last = rendered.at(-1)!;
+  const lineage = {
+    schemaVersion: run.schemaVersion,
+    approval: run.approval,
+    referencePolicy: run.referencePolicy,
+    referenceNotes: {
+      reviewedUrl: "https://figurelabs.ai/",
+      reviewedAt,
+      copiedOrTracedAssets: false,
+      generalTraits: ["layered 2.5D volume", "soft occlusion", "restrained highlights", "material face differentiation", "sparse scientific labels"]
+    },
+    objective: run.objective,
+    baseline: compactCandidate(run.baseline),
+    steps: run.steps.map((step) => ({ generation: step.generation, parentProgramDigest: step.parentProgramDigest, acceptedMutation: step.acceptedMutation, winner: compactCandidate(step.winner), evaluated: step.evaluated })),
+    final: {
+      ...compactCandidate(run.final),
+      outputDigests: {
+        sceneSha256: createHash("sha256").update(JSON.stringify(run.final.scene)).digest("hex"),
+        svgSha256: createHash("sha256").update(last.svg).digest("hex"),
+        pngSha256: createHash("sha256").update(last.png.png).digest("hex"),
+        tikzSha256: createHash("sha256").update(last.tikz.latex).digest("hex")
+      }
+    },
+    finalApproval: run.finalApproval
+  };
+  const approvalPath = resolve(outputDir, "lifelike-direction-approval.json");
+  const lineagePath = resolve(outputDir, "lifelike-optimization-lineage.json");
+  const reviewPath = resolve(outputDir, "review.html");
+  const reviewHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lifelike vector refinement</title><style>body{margin:0;background:#e9eef1;color:#172033;font-family:Arial,sans-serif}main{max-width:1500px;margin:auto;padding:34px}h1{margin:0 0 8px}.lead{max-width:1050px;color:#526271;line-height:1.5}.notice{background:#fff7df;border-left:5px solid #c98c20;padding:12px 16px;margin:22px 0}.compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(580px,1fr));gap:26px}.card{background:#fff;border:1px solid #c7d1d9;border-radius:12px;overflow:hidden;box-shadow:0 8px 25px #2433481c}.card h2{font-size:18px;margin:0;padding:17px 20px 5px}.meta{font-size:13px;padding:0 20px 14px;color:#667582}.figure svg{display:block;width:100%;height:auto;border-top:1px solid #e3e8ed}.winner{outline:3px solid #497c73}.lineage{margin-top:28px;background:#fff;padding:20px;border-radius:10px}.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{background:#eaf3f1;border:1px solid #bfd8d2;border-radius:999px;padding:7px 10px;font-size:13px}</style></head><body><main><h1>Candidate B: lifelike mutable-vector refinement</h1><p class="lead">The approved software-native object was refined using only explicit paths, polygons, gradients, clipping, opacity, and z-order. Public examples informed general quality traits only; no image was copied, traced, or used as a pixel target.</p><div class="notice"><strong>Human gate remains open:</strong> the autonomous score confirms that the declared dimensional controls reached their bounded targets, not that the artwork is finally approved.</div><div class="compare"><section class="card"><h2>Approved baseline</h2><div class="meta">score ${first.candidate.score.toFixed(2)} · digest ${shapeBuiltLifelikeProgramDigest(first.candidate.program).slice(0, 12)}</div><div class="figure">${first.svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div></section><section class="card winner"><h2>Current lifelike winner</h2><div class="meta">score ${last.candidate.score.toFixed(2)} · digest ${shapeBuiltLifelikeProgramDigest(last.candidate.program).slice(0, 12)}</div><div class="figure">${last.svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div></section></div><section class="lineage"><h2>Accepted autonomous changes</h2><div class="chips">${run.steps.map((step) => `<span class="chip">G${step.generation}: ${escapeHtmlForReview(step.acceptedMutation ?? "no change")}</span>`).join("")}</div></section></main></body></html>`;
+  await Promise.all([writeFile(approvalPath, `${JSON.stringify(approval, null, 2)}\n`, "utf8"), writeFile(lineagePath, `${JSON.stringify(lineage, null, 2)}\n`, "utf8"), writeFile(reviewPath, reviewHtml, "utf8")]);
+  console.log(JSON.stringify({ ok: true, outputDir, approvalPath, lineagePath, reviewPath, baselineScore: run.baseline.score, finalScore: run.final.score, acceptedMutations: run.steps.map((step) => step.acceptedMutation), finalProgramDigest: shapeBuiltLifelikeProgramDigest(run.final.program), finalApproval: run.finalApproval }, null, 2));
 }
 
 async function approveFigureBrief(args: string[]): Promise<void> {
@@ -2125,6 +2285,9 @@ Commands:
   scientific:pgfplots [PLOT_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
   scientific:image [REQUEST_JSON_PATH] [--manifest-output JSON_PATH] [--intermediate-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--latex-output TEX_PATH] [--latex-pdf-output PDF_PATH] [--png-output PNG_PATH] [--tectonic-bin PATH]
   scientific:prompt-plan REQUEST_JSON_PATH [--output-dir DIR] [--registry DIR] [--planner-output REVIEWED_SEMANTICS_JSON_PATH | --planner-adapter CONFIG_JSON_PATH] [--tectonic-bin PATH]
+  scientific:shape-benchmark [--output-dir DIR] [--prompt TEXT]
+  scientific:shape-loop [--baseline CANDIDATE_ID] [--reviewer TEXT] [--approved-at ISO_DATE] [--generations N] [--output-dir DIR]
+  scientific:lifelike-loop [--reviewer TEXT] [--approved-at ISO_DATE] [--generations N] [--output-dir DIR]
   scientific:approve-brief PROJECT_JSON_PATH --reviewer TEXT --reviewed-at ISO_DATE --output PROJECT_JSON_PATH
   scientific:approve-final PROJECT_JSON_PATH --evidence FINAL_EVIDENCE_JSON_PATH --reviewer TEXT --reviewed-at ISO_DATE --output PROJECT_JSON_PATH
   scientific:registry-search QUERY_JSON_PATH [--registry DIR]
