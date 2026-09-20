@@ -21,7 +21,7 @@ export interface TikzRenderResult {
 }
 
 /** Render a validated semantic vector scene as a standalone TikZ document. */
-export function renderSceneToTikz(input: unknown): TikzRenderResult {
+export function renderSceneToTikz(input: unknown, options: {compact?: boolean} = {}): TikzRenderResult {
   const scene = normalizeScene(input);
   const paints = paintRegistry(scene);
 
@@ -29,7 +29,12 @@ export function renderSceneToTikz(input: unknown): TikzRenderResult {
   const height = scene.document?.height ?? DEFAULT_HEIGHT;
   const colors = colorDefinitions(scene);
   const body = renderComposition(scene, colors.names, paints.names);
-  const semantics = scene.semantics === undefined
+  // Keep stable names and literal drawing options: physical-size scaling relies
+  // on those options. Gradient stop colors are declared inline, not by name.
+  const usedColors = new Set(body.match(/\bbridgecolor\d+\b/g) ?? []);
+  const colorDeclarations = colors.definitions.filter(line =>
+    !options.compact || usedColors.has(line.match(/\\definecolor\{([^}]+)\}/)![1]!));
+  const semantics = scene.semantics === undefined || options.compact
     ? []
     : [
         "% Scientific semantics (canonical JSON):",
@@ -43,7 +48,7 @@ export function renderSceneToTikz(input: unknown): TikzRenderResult {
     "\\usepackage{fontspec}",
     "\\setsansfont{DejaVu Sans}",
     "\\begin{document}",
-    ...colors.definitions,
+    ...colorDeclarations,
     ...paints.definitions,
     `\\begin{tikzpicture}[x=1pt,y=-1pt]`,
     `  \\path[use as bounding box] (0,0) rectangle (${number(width)},${number(height)});`,
@@ -74,16 +79,64 @@ function paintDefinition(paint: VectorPaint, name: string): string {
   if ((paint.spread ?? "pad") !== "pad") throw new ValidationError(`TikZ paint ${paint.id} requires pad spread`);
   if (paint.transform !== undefined) throw new ValidationError(`TikZ paint ${paint.id} transforms are not supported`);
   if (paint.stops.some((stop) => (stop.opacity ?? 100) !== 100)) throw new ValidationError(`TikZ paint ${paint.id} stop opacity is not supported`);
-  const stops = paint.stops.map((stop) => `color(${number(stop.offset)}bp)=(${paintColor(stop.color)})`).join("; ");
   if (paint.type === "radial_gradient") {
     if ((paint.fx !== undefined && paint.fx !== paint.cx) || (paint.fy !== undefined && paint.fy !== paint.cy)) throw new ValidationError(`TikZ radial paint ${paint.id} requires a centered focus`);
-    return `\\pgfdeclareradialshading{${name}}{\\pgfpoint{0bp}{0bp}}{${stops}}`;
+    if (paint.cx !== 0.5 || paint.cy !== 0.5) {
+      const distance = `${number(75-50*paint.cy)} sub dup mul exch ${number(25+50*paint.cx)} sub dup mul add sqrt ${number(50*paint.r)} div dup 1 gt { pop 1 } if`;
+      const channel = (color: string, index: number) => Number.parseInt(color.slice(index,index+2),16)/255;
+      const interpolate = (index: number): string => {
+        const a=paint.stops[index]!, b=paint.stops[index+1]!;
+        const channels=[1,3,5].map(i=>`${number(channel(b.color,i)-channel(a.color,i))} mul ${number(channel(a.color,i))} add`);
+        return `${number(a.offset/100)} sub ${number((b.offset-a.offset)/100)} div dup ${channels[0]} exch dup ${channels[1]} exch ${channels[2]}`;
+      };
+      let ramp=interpolate(paint.stops.length-2);
+      for (let index=paint.stops.length-3;index>=0;index--) ramp=`dup ${number(paint.stops[index+1]!.offset/100)} le { ${interpolate(index)} } { ${ramp} } ifelse`;
+      return `\\pgfdeclarefunctionalshading{${name}}{\\pgfpoint{0bp}{0bp}}{\\pgfpoint{100bp}{100bp}}{}{${distance} ${ramp}}`;
+    }
+    // PGF maps the central 50bp square to the path bounds. An SVG unit of
+    // radius therefore corresponds to 50bp, not 100bp. Keep the declared
+    // outer radius at 50bp so PGF does not rescale the shading again.
+    const radialStops = paint.stops.filter(stop=>stop.offset*paint.r/2 < 50)
+      .map(stop=>`color(${number(stop.offset*paint.r/2)}bp)=(${paintColor(stop.color)})`);
+    radialStops.push(`color(50bp)=(${paintColor(samplePaintColor(paint,100/paint.r))})`);
+    return `\\pgfdeclareradialshading{${name}}{\\pgfpoint{0bp}{0bp}}{${radialStops.join("; ")}}`;
   }
   const dx = paint.x2 - paint.x1;
   const dy = paint.y2 - paint.y1;
-  if (Math.abs(dy) <= 1e-9 && Math.abs(dx) > 1e-9) return `\\pgfdeclarehorizontalshading{${name}}{100bp}{${stops}}`;
-  if (Math.abs(dx) <= 1e-9 && Math.abs(dy) > 1e-9) return `\\pgfdeclareverticalshading{${name}}{100bp}{${stops}}`;
-  throw new ValidationError(`TikZ linear paint ${paint.id} must be horizontal or vertical`);
+  const horizontal = Math.abs(dy) <= 1e-9 && Math.abs(dx) > 1e-9;
+  const vertical = Math.abs(dx) <= 1e-9 && Math.abs(dy) > 1e-9;
+  if (horizontal || vertical) {
+    // Visible path bounds map to 25..75bp. PDF y increases upward, whereas
+    // scene y increases downward; reverse vertical stop placement accordingly.
+    const origin = horizontal ? 25+50*paint.x1 : 75-50*paint.y1;
+    const span = horizontal ? 50*dx : -50*dy;
+    const positions = [0,...paint.stops.map(stop=>origin+span*stop.offset/100).filter(value=>value>0 && value<100),100].sort((a,b)=>a-b);
+    const stops = positions.map(position=>`color(${number(position)}bp)=(${paintColor(samplePaintColor(paint,(position-origin)/span*100))})`).join("; ");
+    return `\\pgfdeclare${horizontal ? "horizontal" : "vertical"}shading{${name}}{100bp}{${stops}}`;
+  }
+  // Evaluate the SVG object-box projection directly in PGF's visible 25..75bp
+  // square. Functional shading preserves oblique ramps without raster artwork.
+  const denominator=number(50*(dx*dx+dy*dy));
+  if(Number(denominator)===0)throw new ValidationError(`TikZ diagonal paint ${paint.id} is too short for output precision`);
+  const projection=`${number(75-50*paint.y1)} exch sub ${number(dy)} mul exch ${number(25+50*paint.x1)} sub ${number(dx)} mul add ${denominator} div dup 0 lt { pop 0 } if dup 1 gt { pop 1 } if`;
+  const channel=(color:string,index:number)=>Number.parseInt(color.slice(index,index+2),16)/255;
+  const interpolate=(index:number)=>{
+    const a=paint.stops[index]!,b=paint.stops[index+1]!;
+    const channels=[1,3,5].map(i=>`${number(channel(b.color,i)-channel(a.color,i))} mul ${number(channel(a.color,i))} add`);
+    return `${number(a.offset/100)} sub ${number((b.offset-a.offset)/100)} div dup ${channels[0]} exch dup ${channels[1]} exch ${channels[2]}`;
+  };
+  let ramp=interpolate(paint.stops.length-2);
+  for(let i=paint.stops.length-3;i>=0;i--)ramp=`dup ${number(paint.stops[i+1]!.offset/100)} le { ${interpolate(i)} } { ${ramp} } ifelse`;
+  return `\\pgfdeclarefunctionalshading{${name}}{\\pgfpoint{0bp}{0bp}}{\\pgfpoint{100bp}{100bp}}{}{${projection} ${ramp}}`;
+}
+
+function samplePaintColor(paint: VectorPaint, offset: number): string {
+  if (offset >= 100) return paint.stops.at(-1)!.color;
+  const upperIndex = paint.stops.findIndex(stop=>stop.offset >= offset);
+  if (upperIndex <= 0) return paint.stops[0]!.color;
+  const lower = paint.stops[upperIndex-1]!, upper = paint.stops[upperIndex]!;
+  const t = (offset-lower.offset)/(upper.offset-lower.offset);
+  return "#"+[1,3,5].map(index=>Math.round(Number.parseInt(lower.color.slice(index,index+2),16)*(1-t)+Number.parseInt(upper.color.slice(index,index+2),16)*t).toString(16).padStart(2,"0")).join("");
 }
 
 function paintColor(hex: string): string { return `{rgb,255:red,${Number.parseInt(hex.slice(1, 3), 16)};green,${Number.parseInt(hex.slice(3, 5), 16)};blue,${Number.parseInt(hex.slice(5, 7), 16)}}`; }
@@ -146,7 +199,7 @@ function renderGroup(
   children: (parentId: string | undefined, indent: string) => string
 ): string {
   if (group.visible === false) return "";
-  const options = group.opacity === undefined ? "" : `[opacity=${number(group.opacity / 100)}]`;
+  const options = group.opacity === undefined ? "" : `[transparency group, opacity=${number(group.opacity / 100)}]`;
   const output = [`${indent}% group ${comment(group.id)}`, `${indent}\\begin{scope}${options}`];
   if (group.clip) output.push(`${indent}  \\clip ${clipGeometry(group.clip)};`);
   const rendered = children(group.id, `${indent}  `);
@@ -163,7 +216,7 @@ function renderElement(element: VectorElement, index: number, colors: Map<string
     const options = [
       "anchor=north west",
       `text=${colorName(element.style?.fill ?? element.style?.stroke ?? "#111111", colors)}`,
-      `font={\\sffamily\\fontsize{${number(element.size ?? 18)}}{${number((element.size ?? 18) * 1.2)}}\\selectfont}`,
+      `font={\\sffamily${element.fontWeight === "bold" ? "\\bfseries" : ""}\\fontsize{${number(element.size ?? 18)}}{${number((element.size ?? 18) * 1.2)}}\\selectfont}`,
       ...opacityOptions(element.style)
     ];
     return `${prefix}${indent}\\node[${options.join(", ")}] at (${number(element.x)},${number(element.y)}) {${tex(element.text)}};`;
@@ -229,7 +282,9 @@ function styleOptions(style: VectorStyle | undefined, colors: Map<string, string
   if (stroke !== null) options.push(`line width=${number(style?.strokeWidth ?? 2)}pt`);
   if (style?.lineCap) options.push(`line cap=${style.lineCap === "square" ? "rect" : style.lineCap}`);
   if (style?.lineJoin) options.push(`line join=${style.lineJoin}`);
-  if (style?.miterLimit !== undefined) options.push(`miter limit=${number(style.miterLimit)}`);
+  // SVG's implicit limit is 4; PGF's is 10. Leaving this implicit creates
+  // PDF-only spikes at acute material corners even with identical geometry.
+  if (stroke !== null) options.push(`miter limit=${number(style?.miterLimit ?? 4)}`);
   if (style?.dashArray?.length) options.push(`dash pattern=${dashPattern(style.dashArray)}`);
   if (style?.dashOffset !== undefined) options.push(`dash phase=${number(style.dashOffset)}pt`);
   if (style?.opacity !== undefined) options.push(...opacityOptions(style));

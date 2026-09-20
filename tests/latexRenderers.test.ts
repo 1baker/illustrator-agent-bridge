@@ -25,6 +25,7 @@ test("renders flat vector geometry, curves, groups, clips, and escaped labels as
   assert.match(result.latex, /\.\. controls \(70,40\) and \(120,20\) \.\. \(180,80\)/);
   assert.match(result.latex, /Yield\\_50\\% \\ensuremath\{\\pm\} 2\\ensuremath\{\{\}\^\{\\circ\}\}/);
   assert.match(result.latex, /Scientific semantics/);
+  assert.ok(result.latex.includes("\\begin{scope}[transparency group, opacity=0.8]"));
 });
 
 test("renders bounded mutable vector gradient paints as editable TikZ shading", () => {
@@ -76,7 +77,7 @@ test("preserves compound holes and explicit opacity levels in TikZ", () => {
       }
     ]
   });
-  assert.match(result.latex, /\\path\[even odd rule, fill=bridgecolor\d+, draw=bridgecolor\d+, line width=2pt, opacity=0\.5\]/);
+  assert.match(result.latex, /\\path\[even odd rule, fill=bridgecolor\d+, draw=bridgecolor\d+, line width=2pt, miter limit=4, opacity=0\.5\]/);
   assert.equal((result.latex.match(/-- cycle/g) ?? []).length, 2);
 });
 

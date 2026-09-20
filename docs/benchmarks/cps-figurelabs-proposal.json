@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "FigureReferenceBenchmarkFiles.v1",
+  "repository": "1baker/ProposalWriter",
+  "commit": "d3e8cd964071e0432cfc4a82c0823b9c4ed4b360",
+  "documentPath": "proposals/2026-08-17-nsf-cps-predictive-reaction-engineering/deliverables/current/CPS_Project_Description_FINAL_Formatted_Full_2026-09-02.docx",
+  "documentSha256": "6e5efd8e23dbb62fd87ce7c2253ae892d665e66985eea0238feb620c078f7d2f",
+  "verification": "Read GitHub main SHA through the personal GitHub API route, fetched personal, read exact commit blobs, inspected DOCX document.xml blip relationships and embedded image bytes. No proposal worktree edits or GitHub writes.",
+  "references": [
+    {
+      "id": "cps-two-coil",
+      "referencePath": "proposals/2026-08-17-nsf-cps-predictive-reaction-engineering/deliverables/current/figures/figurelabs_v97/figure_2_two_coil_transfer_canvas.png",
+      "referenceSha256": "67e976673d62dc1ba71ad2c7252844fd3ee6e87514e044584831df7c3147824a",
+      "usageEvidence": "GitHub DOCX paragraph index 58 contains rId22 -> word/media/image15.png, whose bytes match this canvas PNG exactly. Original crop is identical centered content with 124 px padding on each horizontal side.",
+      "grade": {
+        "schemaVersion": "FigureGrade.v1",
+        "reviewerId": "reference_grill",
+        "imageSha256": "67e976673d62dc1ba71ad2c7252844fd3ee6e87514e044584831df7c3147824a",
+        "coldReadTakeaway": "Three feeds combine at a static mixer and enter smaller- and larger-ID coils. Characterization and outlet analyses test whether a frozen reaction/activity model predicts both outlets without coil-specific kinetic correction. Geometry changes while the model remains fixed; quantitative acceptance and the localization mechanism are not depicted.",
+        "dimensions": {
+          "messageClarity": {"score": 4, "evidence": "Central frozen-model box and bottom predict-both-outlets banner explain transfer; criterion undefined."},
+          "visualExplanation": {"score": 3, "evidence": "Feeds converge and divide into two coils, but predictions are not explicitly compared with measurements."},
+          "composition": {"score": 3.5, "evidence": "Recognizable paired rows and model; dense annotations and inconsistent outcome branches compete."},
+          "readability": {"score": 2.5, "evidence": "Gray measurement labels and narrow stacked outcomes are vulnerable to proposal reduction, including canvas padding."},
+          "polish": {"score": 3, "evidence": "Coherent equipment palette; pressity typo, duplicated density/viscosity labels and inconsistent branches."}
+        },
+        "blockers": []
+      }
+    },
+    {
+      "id": "cps-fixed-recovery",
+      "referencePath": "proposals/2026-08-17-nsf-cps-predictive-reaction-engineering/deliverables/current/figures/figurelabs_v97/figure_3_fixed_recovery_canvas.png",
+      "referenceSha256": "3c6d30ff975f58d98f32588589dd4582a1ef9ee79c455363fe9b0980c763a4f2",
+      "usageEvidence": "GitHub DOCX paragraph index 80 contains rId28 -> word/media/image21.png, whose bytes match this canvas PNG exactly. Original crop is identical centered content with 28 px padding on each horizontal side.",
+      "grade": {
+        "schemaVersion": "FigureGrade.v1",
+        "reviewerId": "reference_grill",
+        "imageSha256": "3c6d30ff975f58d98f32588589dd4582a1ef9ee79c455363fe9b0980c763a4f2",
+        "coldReadTakeaway": "A prescribed recovery sequence converts reactor effluent into purified monomer, tracking material balance, titanium and volatiles. A separate empirical map depicts anchors, withheld states and a frozen local domain. Its linkage to measured recovery outcomes is implicit.",
+        "dimensions": {
+          "messageClarity": {"score": 4, "evidence": "Large input, process chain, product endpoint and local map establish recovery and prediction purpose."},
+          "visualExplanation": {"score": 4, "evidence": "Apparatus/arrows depict operations, overhead lines depict accounting, and map geometry depicts domain and validation; measurement-to-map connection absent."},
+          "composition": {"score": 4, "evidence": "Strong process spine and distinct accounting/map layers; duplicated headings and detached endpoint metrics remain."},
+          "readability": {"score": 3, "evidence": "Main labels clear, but small tracking/map labels and condensed stacked text are less robust at proposal size."},
+          "polish": {"score": 4, "evidence": "Coherent apparatus illustration, restrained palette and framed map; lock obscures geometry and endpoint metrics float."}
+        },
+        "blockers": []
+      }
+    }
+  ],
+  "policy": "Freeze reference grades and compare each dimension against the maximum reference score. Do not lower references during revision; total-only superiority cannot pass. Reference presentation does not authorize its scientific claims. These are independent agent judgments, not objective certification."
+}

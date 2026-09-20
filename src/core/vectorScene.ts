@@ -147,6 +147,7 @@ export interface TextElement extends BaseElement {
   text: string;
   size?: number;
   font?: string;
+  fontWeight?: "normal" | "bold";
 }
 
 export interface LineElement extends BaseElement {
@@ -196,6 +197,7 @@ export interface VectorStyle {
   stroke?: string | null;
   strokePaint?: string;
   strokeWidth?: number;
+  /** Percentage from 0 (invisible) to 100 (opaque), not a unit fraction. */
   opacity?: number;
   lineCap?: "butt" | "round" | "square";
   lineJoin?: "miter" | "round" | "bevel";
