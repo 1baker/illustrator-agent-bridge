@@ -72,6 +72,7 @@ import { generateScientificImage } from "./scientific/imageGenerator.js";
 import { generateScientificFigureProject } from "./scientific/figureProjectGenerator.js";
 import { approveScientificFigureBrief, approveScientificFigureFinal, normalizeScientificFigureProject, semanticFigureDigest, type ScientificFigureFinalApprovalEvidence } from "./scientific/figureProject.js";
 import { planScientificPromptFigure } from "./scientific/promptFigureWorkflow.js";
+import {writeProposalConceptFigure} from './scientific/proposalConceptArtifacts.js';
 import { approveCandidateBLifelikeRefinement, approveShapeBuiltDirection, generateShapeBuiltScientificObjectBenchmark, optimizeCandidateBLifelikeRefinement, optimizeShapeBuiltScientificObject, shapeBuiltLifelikeProgramDigest, shapeBuiltProgramDigest } from "./scientific/shapeBuiltObjectBenchmark.js";
 import { promotePublicationFigure, rebuildPublicationFigureRegistry, searchPublicationFigureRegistry, type RegistryPromotionInput } from "./registry/publicationFigureRegistry.js";
 import {
@@ -141,6 +142,12 @@ async function main(argv: string[]): Promise<void> {
     case "scientific:prompt-plan":
       await planPromptFigure(rest);
       return;
+    case 'scientific:proposal-concept': {
+      const options=parseOptions(rest),source=options.positionals[0],output=optionValue(options,'output-dir');
+      if(!source||options.positionals.length!==1||!output)throw new ValidationError('Requires plan.json --output-dir FRESH_DIR [--pdf]');
+      console.log(JSON.stringify(await writeProposalConceptFigure(await readJsonFile(source),resolve(output),flagValue(options,'pdf')),null,2));
+      return;
+    }
     case "scientific:shape-benchmark":
       await generateShapeBenchmark(rest);
       return;
@@ -2152,7 +2159,8 @@ const flagOptions = new Set([
   "embed-reference",
   "require-external-review",
   "require-chatgpt-browser",
-  "no-external-review-preflight"
+  "no-external-review-preflight",
+  "pdf"
 ]);
 
 function parseOptions(args: string[]): ParsedOptions {
@@ -2293,6 +2301,7 @@ Commands:
   scientific:text [TEXT_PATH] [--parse-output JSON_PATH] [--figure-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
   scientific:plot [PLOT_JSON_PATH] [--result-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
   scientific:pgfplots [PLOT_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
+  scientific:proposal-concept PLAN_JSON_PATH --output-dir FRESH_DIR [--pdf]
   scientific:image [REQUEST_JSON_PATH] [--manifest-output JSON_PATH] [--intermediate-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--latex-output TEX_PATH] [--latex-pdf-output PDF_PATH] [--png-output PNG_PATH] [--tectonic-bin PATH]
   scientific:prompt-plan REQUEST_JSON_PATH [--output-dir DIR] [--registry DIR] [--planner-output REVIEWED_SEMANTICS_JSON_PATH | --planner-adapter CONFIG_JSON_PATH] [--tectonic-bin PATH]
   scientific:shape-benchmark [--output-dir DIR] [--prompt TEXT]
