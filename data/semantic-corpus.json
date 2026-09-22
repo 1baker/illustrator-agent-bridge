@@ -16,6 +16,70 @@
     "source": "local seed visual semantics"
   },
   {
+    "id": "object.microscope.vector-grammar",
+    "kind": "object_semantics",
+    "title": "Microscope vector grammar",
+    "tags": ["microscope", "instrument", "eyepiece", "objective", "stage", "focus", "slide", "illumination"],
+    "text": "A microscope is recognizable from an eyepiece, angled optical tube, objective turret, stage with slide clips, focus knobs, illumination path, vertical arm, and heavy base. Keep the optical path and stage aligned so it reads as a real instrument before adding labels.",
+    "source": "local seed object grammar"
+  },
+  {
+    "id": "object.reactor.vector-grammar",
+    "kind": "object_semantics",
+    "title": "Reactor vessel vector grammar",
+    "tags": ["reactor", "bioreactor", "vessel", "tank", "impeller", "baffle", "sensor", "pipe"],
+    "text": "A reactor or bioreactor reads as a transparent vessel with top and bottom domes, a central agitator shaft, impeller blades, baffles, inlet and outlet pipes, sensors or gauges, liquid fill, and bubbles or particles when mixing is important.",
+    "source": "local seed object grammar"
+  },
+  {
+    "id": "object.urban-transit-system",
+    "kind": "object_semantics",
+    "title": "Urban transit system",
+    "tags": ["city", "urban", "transit", "train", "rail", "station", "skyline", "river", "infrastructure"],
+    "text": "An urban transit system illustration should combine skyline buildings, transit route lines, station nodes, trains or buses, platforms, bike lanes, parks or a river corridor, and optional data overlay nodes. Keep each layer named separately so a browser agent can revise transit, buildings, environment, and labels independently.",
+    "source": "local seed scene grammar"
+  },
+  {
+    "id": "object.workflow-process-system",
+    "kind": "object_semantics",
+    "title": "Workflow process system",
+    "tags": ["workflow", "process", "pipeline", "supply-chain", "factory", "timeline", "cycle"],
+    "text": "A workflow or process illustration reads as ordered stage panels connected by arrows, with input, processing, quality gate, output, status nodes, and a feedback loop. Repeated panels should use consistent shapes and named details.",
+    "source": "local seed scene grammar"
+  },
+  {
+    "id": "object.ecosystem-landscape-system",
+    "kind": "object_semantics",
+    "title": "Ecosystem landscape system",
+    "tags": ["ecosystem", "landscape", "forest", "river", "habitat", "watershed", "farm", "climate"],
+    "text": "An ecosystem scene should layer sky, landforms, water flow, forest patches, habitat pools, farms or fields, clouds, sun, and callouts that explain flows. Use visual structure first, then concise labels.",
+    "source": "local seed scene grammar"
+  },
+  {
+    "id": "shape.instrument-callout-composition",
+    "kind": "shape_combination",
+    "title": "Complex instrument callout composition",
+    "tags": ["instrument", "apparatus", "callout", "shape", "combination", "editable"],
+    "text": "A complex object stays editable when the main silhouette, panels, ports, optics, controls, fasteners, shadows, leader lines, and labels are separate named vector parts. Use callouts sparingly and make each callout point to a concrete shape.",
+    "source": "local seed shape combination"
+  },
+  {
+    "id": "shape.mechanical-assembly-vector",
+    "kind": "shape_combination",
+    "title": "Mechanical assembly vector grammar",
+    "tags": ["mechanical", "machine", "gear", "motor", "sensor", "assembly", "panel"],
+    "text": "Mechanical assemblies read well with a main chassis, exposed drive train, gears with teeth and hubs, belt spans, access panels, screws, sensor modules, and controls. Make repeated parts consistent and named so they can be revised individually.",
+    "source": "local seed shape combination"
+  },
+  {
+    "id": "shape.layered-system-illustration",
+    "kind": "shape_combination",
+    "title": "Layered system illustration",
+    "tags": ["system", "layers", "diagram", "map", "callout", "editable"],
+    "text": "Broad prompts become stronger Illustrator scenes when background context, main subject, infrastructure or process layers, overlays, callouts, and labels are separate named vector elements. Use enough concrete shapes that the drawing remains meaningful without relying on a caption.",
+    "source": "local seed shape combination"
+  },
+  {
     "id": "shape.cat.full-body",
     "kind": "shape_recipe",
     "title": "Full cat vector recipe",
@@ -77,6 +141,14 @@
     "title": "Molecular self-assembly",
     "tags": ["molecular", "assembly", "polymer", "supramolecular", "network", "monomer"],
     "text": "Molecular self-assembly is clearest as small building blocks organizing into a larger ordered structure. Show monomers as repeated nodes, weak interactions as dotted or pale connector lines, and the final structure as a clustered network or ordered fiber. Use arrows from disordered particles to an organized motif.",
+    "source": "local scientific visual semantics"
+  },
+  {
+    "id": "concept.core-shell-emulsion-polymerization",
+    "kind": "scientific_concept",
+    "title": "Core-shell emulsion polymerization",
+    "tags": ["core-shell", "emulsion", "polymerization", "latex", "seed", "surfactant", "micelle", "initiator", "radical", "shell", "monomer"],
+    "text": "A core-shell emulsion polymerization figure should show an aqueous phase with surfactant-stabilized monomer droplets or explicit micelles drawn with head-tail surfactant grammar, seed latex particles, water-soluble initiator radicals, first-stage core polymerization inside seed particles, second-stage shell monomer feed at the particle surface, and a final enlarged cross-section with distinct core, shell, and stabilizing surfactant corona. Keep the pre-emulsion panel as component setup; reserve directional monomer/radical diffusion arrows for the core-polymerization stage.",
     "source": "local scientific visual semantics"
   },
   {

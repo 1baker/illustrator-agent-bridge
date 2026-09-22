@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "ScientificPromptFigureRequest.v1",
+  "id": "prompt-only-latent-diol-interphase",
+  "prompt": "Create a proposal-width concept figure, without using a reference image, showing one-sided acid diffusion into a protected semicrystalline polymer film, depth-dependent conversion of protected groups into vicinal diols, and a diol-rich interphase adjacent to hydroxylated silica after neutralization. Present every mechanistic relationship as a hypothesis, not measured data. Use a clean left-to-right scientific narrative with a restrained publication palette, editable vector objects, direct labels, and no quantitative axes or invented values.",
+  "profile": "proposal",
+  "size": {
+    "preset": "proposal_full_width",
+    "dpi": 300
+  },
+  "intent": "mechanism",
+  "evidence": [],
+  "claimPolicy": "allow_explicit_hypotheses",
+  "planner": "auto",
+  "presentation": {
+    "direction": "left_to_right",
+    "spacing": "compact",
+    "density": "balanced"
+  },
+  "registry": {
+    "mode": "approved_only",
+    "limit": 3
+  }
+}

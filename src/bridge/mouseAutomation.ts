@@ -1,21 +1,31 @@
 import { spawn } from "node:child_process";
 import type { LaunchPlatform } from "./launcher.js";
 
-export type IllustratorMouseAction = "move" | "click" | "double-click" | "drag";
-export type IllustratorMouseButton = "left" | "right";
+export type AdobeMouseTarget = "illustrator" | "photoshop";
+export type AdobeMouseAction = "move" | "click" | "double-click" | "drag";
+export type AdobeMouseButton = "left" | "right";
+export type IllustratorMouseAction = AdobeMouseAction;
+export type IllustratorMouseButton = AdobeMouseButton;
 
-export interface DriveIllustratorMouseOptions {
+export interface DriveAdobeMouseOptions {
+  target: AdobeMouseTarget;
   platform: Exclude<LaunchPlatform, "auto">;
-  action?: IllustratorMouseAction;
-  button?: IllustratorMouseButton;
+  action?: AdobeMouseAction;
+  button?: AdobeMouseButton;
   relativeX?: number;
   relativeY?: number;
   endRelativeX?: number;
   endRelativeY?: number;
   durationMs?: number;
   windowTitlePattern?: string;
+  toolShortcut?: string;
+  toolShortcutDelayMs?: number;
+  postShortcut?: string;
+  postShortcutDelayMs?: number;
   dryRun?: boolean;
 }
+
+export type DriveIllustratorMouseOptions = Omit<DriveAdobeMouseOptions, "target">;
 
 export interface MousePoint {
   x: number;
@@ -31,13 +41,18 @@ export interface MouseBounds {
   height: number;
 }
 
-export interface DriveIllustratorMouseResult {
+export interface DriveAdobeMouseResult {
   ok: boolean;
   attempted: boolean;
   dryRun: boolean;
+  target: AdobeMouseTarget;
   platform: Exclude<LaunchPlatform, "auto">;
-  action: IllustratorMouseAction | "unsupported" | "dry-run";
-  button?: IllustratorMouseButton;
+  action: AdobeMouseAction | "unsupported" | "dry-run";
+  button?: AdobeMouseButton;
+  toolShortcut?: string;
+  toolShortcutSent?: boolean;
+  postShortcut?: string;
+  postShortcutSent?: boolean;
   matchedProcess?: string;
   matchedWindow?: string;
   bounds?: MouseBounds;
@@ -54,15 +69,26 @@ export interface DriveIllustratorMouseResult {
   error?: string;
 }
 
+export type DriveIllustratorMouseResult = DriveAdobeMouseResult;
+
 export async function driveIllustratorMouse(options: DriveIllustratorMouseOptions): Promise<DriveIllustratorMouseResult> {
+  return driveAdobeMouse({ ...options, target: "illustrator" });
+}
+
+export async function drivePhotoshopMouse(options: DriveIllustratorMouseOptions): Promise<DriveAdobeMouseResult> {
+  return driveAdobeMouse({ ...options, target: "photoshop" });
+}
+
+export async function driveAdobeMouse(options: DriveAdobeMouseOptions): Promise<DriveAdobeMouseResult> {
   if (options.platform !== "windows" && options.platform !== "wsl") {
     return {
       ok: false,
       attempted: false,
       dryRun: Boolean(options.dryRun),
+      target: options.target,
       platform: options.platform,
       action: "unsupported",
-      error: "Mouse automation is currently implemented for Windows and WSL-hosted Illustrator only."
+      error: `Mouse automation is currently implemented for Windows and WSL-hosted ${targetDisplayName(options.target)} only.`
     };
   }
 
@@ -73,7 +99,13 @@ export async function driveIllustratorMouse(options: DriveIllustratorMouseOption
   const endRelativeX = unitNumber(options.endRelativeX ?? Math.min(0.9, relativeX + 0.2), "endRelativeX");
   const endRelativeY = unitNumber(options.endRelativeY ?? relativeY, "endRelativeY");
   const durationMs = Math.max(0, Math.trunc(options.durationMs ?? 250));
+  const toolShortcutDelayMs = Math.max(0, Math.trunc(options.toolShortcutDelayMs ?? 180));
+  const postShortcutDelayMs = Math.max(0, Math.trunc(options.postShortcutDelayMs ?? 250));
+  const targetConfig = mouseTargetConfig(options.target);
   const script = mousePowerShell({
+    target: options.target,
+    appName: targetConfig.appName,
+    processPattern: targetConfig.processPattern,
     action,
     button,
     relativeX,
@@ -81,7 +113,11 @@ export async function driveIllustratorMouse(options: DriveIllustratorMouseOption
     endRelativeX,
     endRelativeY,
     durationMs,
-    windowTitlePattern: options.windowTitlePattern
+    windowTitlePattern: options.windowTitlePattern,
+    toolShortcut: options.toolShortcut,
+    toolShortcutDelayMs,
+    postShortcut: options.postShortcut,
+    postShortcutDelayMs
   });
 
   if (options.dryRun) {
@@ -89,9 +125,14 @@ export async function driveIllustratorMouse(options: DriveIllustratorMouseOption
       ok: true,
       attempted: false,
       dryRun: true,
+      target: options.target,
       platform: options.platform,
       action: "dry-run",
       button,
+      toolShortcut: options.toolShortcut,
+      toolShortcutSent: false,
+      postShortcut: options.postShortcut,
+      postShortcutSent: false,
       stdout: script
     };
   }
@@ -102,9 +143,14 @@ export async function driveIllustratorMouse(options: DriveIllustratorMouseOption
     ok: execution.exitCode === 0 && Boolean(parsed?.ok),
     attempted: Boolean(parsed?.attempted),
     dryRun: false,
+    target: normalizeTarget(parsed?.target) ?? options.target,
     platform: options.platform,
     action: normalizeAction(parsed?.action) ?? action,
     button: normalizeButton(parsed?.button) ?? button,
+    toolShortcut: stringOrUndefined(parsed?.toolShortcut) ?? options.toolShortcut,
+    toolShortcutSent: booleanOrUndefined(parsed?.toolShortcutSent),
+    postShortcut: stringOrUndefined(parsed?.postShortcut) ?? options.postShortcut,
+    postShortcutSent: booleanOrUndefined(parsed?.postShortcutSent),
     matchedProcess: stringOrUndefined(parsed?.matchedProcess),
     matchedWindow: stringOrUndefined(parsed?.matchedWindow),
     bounds: mouseBoundsOrUndefined(parsed?.bounds),
@@ -174,7 +220,15 @@ function unitNumber(value: number, name: string): number {
   return value;
 }
 
-function normalizeAction(input: unknown): IllustratorMouseAction | undefined {
+function normalizeTarget(input: unknown): AdobeMouseTarget | undefined {
+  if (input === "illustrator" || input === "photoshop") {
+    return input;
+  }
+
+  return undefined;
+}
+
+function normalizeAction(input: unknown): AdobeMouseAction | undefined {
   if (input === "move" || input === "click" || input === "double-click" || input === "drag") {
     return input;
   }
@@ -182,7 +236,7 @@ function normalizeAction(input: unknown): IllustratorMouseAction | undefined {
   return undefined;
 }
 
-function normalizeButton(input: unknown): IllustratorMouseButton | undefined {
+function normalizeButton(input: unknown): AdobeMouseButton | undefined {
   if (input === "left" || input === "right") {
     return input;
   }
@@ -233,17 +287,27 @@ function mouseBoundsOrUndefined(input: unknown): MouseBounds | undefined {
 }
 
 function mousePowerShell(options: {
-  action: IllustratorMouseAction;
-  button: IllustratorMouseButton;
+  target: AdobeMouseTarget;
+  appName: string;
+  processPattern: string;
+  action: AdobeMouseAction;
+  button: AdobeMouseButton;
   relativeX: number;
   relativeY: number;
   endRelativeX: number;
   endRelativeY: number;
   durationMs: number;
   windowTitlePattern?: string;
+  toolShortcut?: string;
+  toolShortcutDelayMs: number;
+  postShortcut?: string;
+  postShortcutDelayMs: number;
 }): string {
   return `
 $ErrorActionPreference = "Stop"
+$targetName = ${powerShellString(options.target)}
+$appName = ${powerShellString(options.appName)}
+$processPattern = ${powerShellString(options.processPattern)}
 $action = ${powerShellString(options.action)}
 $button = ${powerShellString(options.button)}
 $relativeX = ${options.relativeX}
@@ -252,11 +316,20 @@ $endRelativeX = ${options.endRelativeX}
 $endRelativeY = ${options.endRelativeY}
 $durationMs = ${options.durationMs}
 $windowTitlePattern = ${powerShellString(options.windowTitlePattern ?? "")}
+$toolShortcut = ${powerShellString(options.toolShortcut ?? "")}
+$toolShortcutDelayMs = ${options.toolShortcutDelayMs}
+$postShortcut = ${powerShellString(options.postShortcut ?? "")}
+$postShortcutDelayMs = ${options.postShortcutDelayMs}
 $result = [ordered]@{
   ok = $false
   attempted = $true
+  target = $targetName
   action = $action
   button = $button
+  toolShortcut = if ($toolShortcut.Length -eq 0) { $null } else { $toolShortcut }
+  toolShortcutSent = $false
+  postShortcut = if ($postShortcut.Length -eq 0) { $null } else { $postShortcut }
+  postShortcutSent = $false
   matchedProcess = $null
   matchedWindow = $null
   bounds = $null
@@ -314,7 +387,7 @@ public static class AgentBridgeMouse {
 "@
 
   $processes = Get-Process | Where-Object {
-    $_.ProcessName -match "(?i)Illustrator" -and $_.MainWindowHandle -ne 0
+    $_.ProcessName -match $processPattern -and $_.MainWindowHandle -ne 0
   } | Sort-Object Id -Descending
 
   $target = $null
@@ -327,21 +400,21 @@ public static class AgentBridgeMouse {
   }
 
   if ($null -eq $target) {
-    $result.error = "No running Illustrator window with a main window handle was found."
+    $result.error = "No running " + $appName + " window with a main window handle was found."
     Finish 1
   }
 
   $handle = $target.MainWindowHandle
   $rect = New-Object AgentBridgeMouse+RECT
   if (-not [AgentBridgeMouse]::GetWindowRect($handle, [ref]$rect)) {
-    $result.error = "Unable to read Illustrator window bounds."
+    $result.error = "Unable to read " + $appName + " window bounds."
     Finish 1
   }
 
   $width = $rect.Right - $rect.Left
   $height = $rect.Bottom - $rect.Top
   if ($width -le 0 -or $height -le 0) {
-    $result.error = "Illustrator window bounds are empty."
+    $result.error = $appName + " window bounds are empty."
     Finish 1
   }
 
@@ -419,7 +492,7 @@ public static class AgentBridgeMouse {
 
   $pointsAreSafe = if ($action -eq "drag") { $result.targetPointConfirmed -and $result.endPointConfirmed } else { $result.targetPointConfirmed }
   if (-not ($result.foregroundConfirmed -or $pointsAreSafe)) {
-    $result.error = "Illustrator window could not be focused and the target mouse point is not confirmed to belong to Illustrator."
+    $result.error = $appName + " window could not be focused and the target mouse point is not confirmed to belong to " + $appName + "."
     Finish 1
   }
 
@@ -433,6 +506,12 @@ public static class AgentBridgeMouse {
   $rightUp = 0x0010
   $down = if ($button -eq "right") { $rightDown } else { $leftDown }
   $up = if ($button -eq "right") { $rightUp } else { $leftUp }
+
+  if ($toolShortcut.Length -gt 0) {
+    $shell.SendKeys($toolShortcut)
+    $result.toolShortcutSent = $true
+    Start-Sleep -Milliseconds $toolShortcutDelayMs
+  }
 
   [void][AgentBridgeMouse]::SetCursorPos($startX, $startY)
   Start-Sleep -Milliseconds 100
@@ -463,6 +542,13 @@ public static class AgentBridgeMouse {
   $after = New-Object AgentBridgeMouse+POINT
   [void][AgentBridgeMouse]::GetCursorPos([ref]$after)
   $result.finalCursor = [ordered]@{ x = $after.X; y = $after.Y }
+
+  if ($postShortcut.Length -gt 0) {
+    Start-Sleep -Milliseconds $postShortcutDelayMs
+    $shell.SendKeys($postShortcut)
+    $result.postShortcutSent = $true
+  }
+
   $result.ok = $true
 } catch {
   $result.error = $_.Exception.Message
@@ -478,4 +564,16 @@ if ($result.ok) {
 
 function powerShellString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+function mouseTargetConfig(target: AdobeMouseTarget): { appName: string; processPattern: string } {
+  if (target === "photoshop") {
+    return { appName: "Photoshop", processPattern: "(?i)Photoshop" };
+  }
+
+  return { appName: "Illustrator", processPattern: "(?i)Illustrator" };
+}
+
+function targetDisplayName(target: AdobeMouseTarget): string {
+  return target === "photoshop" ? "Photoshop" : "Illustrator";
 }

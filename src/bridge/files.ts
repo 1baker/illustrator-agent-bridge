@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 export type IllustratorHostPlatform = "auto" | "macos" | "windows" | "wsl" | "linux";
+export type AdobeHostPlatform = IllustratorHostPlatform;
 
 export interface BridgeDirs {
   root: string;
@@ -54,6 +55,10 @@ export function toIllustratorPath(localPath: string, hostPlatform: IllustratorHo
   }
 
   return normalized;
+}
+
+export function toAdobeHostPath(localPath: string, hostPlatform: AdobeHostPlatform = configuredHostPlatform()): string {
+  return toIllustratorPath(localPath, hostPlatform);
 }
 
 function configuredHostPlatform(): IllustratorHostPlatform {

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "title": "Scientific interaction grammar",
+    "subtitle": "Meaning selects connector geometry and color: association, activation, inhibition, conversion, and transport",
+    "width": 1600,
+    "height": 900
+  },
+  "entities": [
+    { "id": "signal", "type": "molecule", "kind": "signaling_molecule", "label": "signal" },
+    { "id": "inhibitor", "type": "molecule", "kind": "inhibitory_molecule", "label": "inhibitor" },
+    { "id": "substrate", "type": "molecule", "kind": "substrate_molecule", "label": "substrate" },
+    { "id": "receptor", "type": "receptor", "kind": "membrane_receptor", "label": "receptor", "emphasis": "secondary" },
+    { "id": "enzyme", "type": "protein", "kind": "catalytic_enzyme", "label": "enzyme", "emphasis": "secondary" },
+    { "id": "product", "type": "molecule", "kind": "reaction_product", "label": "product" },
+    { "id": "destination", "type": "process", "kind": "downstream_process", "label": "destination" }
+  ],
+  "interactions": [
+    { "id": "binding", "sourceId": "signal", "type": "binds_to", "targetId": "receptor", "label": "binds" },
+    { "id": "activation", "sourceId": "receptor", "type": "activates", "targetId": "enzyme", "label": "activates" },
+    { "id": "inhibition", "sourceId": "inhibitor", "type": "inhibits", "targetId": "enzyme", "label": "inhibits" },
+    { "id": "association", "sourceId": "substrate", "type": "associates_with", "targetId": "enzyme", "label": "associates" },
+    { "id": "conversion", "sourceId": "enzyme", "type": "converts_to", "targetId": "product", "label": "converts" },
+    { "id": "transport", "sourceId": "product", "type": "transports_to", "targetId": "destination", "label": "transports" }
+  ],
+  "presentation": {
+    "direction": "left_to_right",
+    "spacing": "normal"
+  }
+}

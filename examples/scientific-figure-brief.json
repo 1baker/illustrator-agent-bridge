@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "brief",
+  "content": {
+    "schemaVersion": 1,
+    "source": {
+      "mode": "reference_notes",
+      "description": "A journal schematic explaining how RAFT dispersion polymerization converts soluble chains into self-assembled nanoparticles.",
+      "notes": [
+        "Preserve a clear left-to-right mechanism.",
+        "Use distinct vector symbols for chemistry, process, and morphology.",
+        "Keep labels editable and avoid relying on decorative raster imagery."
+      ]
+    },
+    "brief": {
+      "title": "RAFT-PISA morphology evolution",
+      "subtitle": "Soluble chain extension drives in situ self-assembly into higher-order nanostructures",
+      "audience": "journal",
+      "intent": "mechanism",
+      "width": 2400,
+      "height": 900,
+      "direction": "left_to_right",
+      "spacing": "normal"
+    },
+    "components": [
+      { "id": "macrocta", "type": "molecule", "label": "Soluble macro-CTA", "kind": "macro_chain_transfer_agent", "emphasis": "secondary" },
+      { "id": "extension", "type": "process", "label": "Core-block growth", "kind": "dispersion_polymerization" },
+      { "id": "nucleation", "type": "particle", "label": "Micellar nucleation", "kind": "spherical_micelle" },
+      { "id": "fusion", "type": "process", "label": "Particle fusion", "kind": "morphology_transition", "emphasis": "secondary" },
+      { "id": "worms", "type": "organelle", "label": "Worm-like micelles", "kind": "worm_micelle" },
+      { "id": "vesicles", "type": "cell", "label": "Vesicles", "kind": "polymer_vesicle" }
+    ],
+    "relationships": [
+      { "id": "r1", "sourceId": "macrocta", "type": "converts_to", "targetId": "extension", "label": "monomer + initiator" },
+      { "id": "r2", "sourceId": "extension", "type": "converts_to", "targetId": "nucleation", "label": "insoluble block" },
+      { "id": "r3", "sourceId": "nucleation", "type": "associates_with", "targetId": "fusion", "label": "increasing packing" },
+      { "id": "r4", "sourceId": "fusion", "type": "converts_to", "targetId": "worms" },
+      { "id": "r5", "sourceId": "worms", "type": "converts_to", "targetId": "vesicles", "label": "membrane closure" }
+    ],
+    "refinements": [
+      { "operation": "rename_component", "componentId": "extension", "label": "Solvophobic block growth" },
+      { "operation": "set_emphasis", "componentId": "nucleation", "emphasis": "primary" },
+      { "operation": "rename_relationship", "relationshipId": "r3", "label": "packing frustration" },
+      { "operation": "set_layout", "spacing": "open" }
+    ]
+  },
+  "output": {
+    "png": { "width": 1500, "background": "#FFFFFF" }
+  }
+}

@@ -1,4 +1,42 @@
-export type BridgeCommand = PingCommand | CartoonSceneCommand | ExportCommand;
+import type { VectorScene } from "../core/vectorScene.js";
+
+export type {
+  BaseElement,
+  EllipseElement,
+  CompoundPathElement,
+  CompoundSubpath,
+  LineElement,
+  PathElement,
+  PathPoint,
+  Point,
+  PolygonElement,
+  RectElement,
+  ScientificObject,
+  ScientificRelationship,
+  SceneSemantics,
+  SemanticScalar,
+  TextElement,
+  VectorDocument,
+  VectorElement,
+  VectorGroup,
+  VectorClip,
+  VectorPaint,
+  LinearGradientPaint,
+  RadialGradientPaint,
+  GradientStop,
+  GradientUnits,
+  GradientSpread,
+  VectorScene,
+  VectorStyle
+} from "../core/vectorScene.js";
+
+// Compatibility aliases for the existing Illustrator adapter and planners.
+export type CartoonScene = import("../core/vectorScene.js").VectorScene;
+export type SceneDocument = import("../core/vectorScene.js").VectorDocument;
+export type SceneElement = import("../core/vectorScene.js").VectorElement;
+export type ElementStyle = import("../core/vectorScene.js").VectorStyle;
+
+export type BridgeCommand = PingCommand | CartoonSceneCommand | ExportCommand | PlaceFileReferenceCommand;
 
 export interface PingCommand {
   kind: "ping";
@@ -16,84 +54,21 @@ export interface ExportCommand {
   outputPath: string;
 }
 
-export type ExportFormat = "pdf" | "svg" | "png" | "jpg";
-
-export interface CartoonScene {
-  document?: SceneDocument;
-  elements: SceneElement[];
-}
-
-export interface SceneDocument {
-  title?: string;
+export interface PlaceFileReferenceCommand {
+  kind: "place_file_reference" | "place_image_reference";
+  inputPath: string;
+  layerName?: string;
+  name?: string;
+  x?: number;
+  y?: number;
   width?: number;
   height?: number;
-  colorMode?: "RGB" | "CMYK";
-}
-
-export type SceneElement = RectElement | EllipseElement | TextElement | LineElement | PolygonElement | PathElement;
-
-export interface BaseElement {
-  name?: string;
-  x: number;
-  y: number;
-  style?: ElementStyle;
-}
-
-export interface RectElement extends BaseElement {
-  type: "rect";
-  width: number;
-  height: number;
-}
-
-export interface EllipseElement extends BaseElement {
-  type: "ellipse";
-  width: number;
-  height: number;
-}
-
-export interface TextElement extends BaseElement {
-  type: "text";
-  text: string;
-  size?: number;
-  font?: string;
-}
-
-export interface LineElement extends BaseElement {
-  type: "line";
-  x2: number;
-  y2: number;
-}
-
-export interface PolygonElement extends BaseElement {
-  type: "polygon";
-  points: Point[];
-}
-
-export interface PathElement extends BaseElement {
-  type: "path";
-  points: PathPoint[];
-  closed?: boolean;
-}
-
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export interface PathPoint extends Point {
-  leftX?: number;
-  leftY?: number;
-  rightX?: number;
-  rightY?: number;
-  pointType?: "corner" | "smooth";
-}
-
-export interface ElementStyle {
-  fill?: string | null;
-  stroke?: string | null;
-  strokeWidth?: number;
   opacity?: number;
+  locked?: boolean;
+  embed?: boolean;
 }
+
+export type ExportFormat = "pdf" | "svg" | "png" | "jpg";
 
 export interface GeneratedJob {
   id: string;

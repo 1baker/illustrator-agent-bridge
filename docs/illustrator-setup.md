@@ -1,5 +1,7 @@
 # Illustrator Setup
 
+Illustrator is an optional execution and editing adapter. The generator's authoritative work—scientific semantics, layout, routing, path markers, vector geometry, SVG, and PNG proofs—runs in software without Adobe. Use the instructions below only when a deliverable specifically needs Illustrator editing, native integration, or an Adobe export path.
+
 ## Native MCP Path
 
 Use this when Illustrator Beta is installed.
@@ -188,6 +190,13 @@ npm run mcp:serve
 
 An MCP client can then call:
 
+- `render_vector_scene_png` for software-native PNG rendering without Photoshop
+- `compose_vector_scene_layers_png` for software-native layer opacity, masks, blend modes, and PNG output
+- `flatten_bezier_path` for tolerance-controlled cubic Bézier approximation
+- `expand_vector_stroke` for width, cap, join, miter, and dash compilation into filled geometry
+- `construct_polygon_boolean` for software-native union, intersection, difference, and XOR
+- `generate_scientific_figure_from_text` for controlled-text, Adobe-independent figure generation
+- `generate_scientific_story` for Adobe-independent figure generation
 - `detect_illustrator_desktop`
 - `probe_illustrator_communication`
 - `drive_illustrator_mouse`

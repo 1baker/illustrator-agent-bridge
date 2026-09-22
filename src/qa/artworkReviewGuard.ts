@@ -172,8 +172,8 @@ function checkTextReliance(textElements: Array<Extract<SceneElement, { type: "te
   const visualNonTextCount = visualElements.filter((element) => element.type !== "text").length;
   const targetText = target ? textElements.filter((element) => new RegExp(`\\b${escapeRegex(target)}\\b`, "i").test(element.text)) : [];
 
-  if (targetText.length > 0) {
-    return fail("text-reliance", `The artwork includes text spelling out ${target}; the object should be recognizable from shapes, not labels.`);
+  if (targetText.length > 0 && visualNonTextCount < 4) {
+    return fail("text-reliance", `The artwork includes text spelling out ${target} without enough supporting vector structure; the object should be recognizable from shapes, not labels.`);
   }
 
   if (textElements.length > 0 && visualNonTextCount < 4) {
@@ -184,7 +184,7 @@ function checkTextReliance(textElements: Array<Extract<SceneElement, { type: "te
     return warn("text-reliance", "The scene has many text labels relative to visual parts; reduce label reliance or add stronger shapes.");
   }
 
-  return pass("text-reliance", textElements.length === 0 ? "The scene does not rely on text labels." : "Text labels are supported by enough visible vector artwork.");
+  return pass("text-reliance", textElements.length === 0 ? "The scene does not rely on text labels." : "Text labels, including any subject label, are supported by enough visible vector artwork.");
 }
 
 function checkFraming(document: Box, visualBounds: Box | undefined): ArtworkReviewCheck {
@@ -257,6 +257,14 @@ function elementBox(element: SceneElement): Box | undefined {
         ])
         .filter((point): point is { x: number; y: number } => Boolean(point))
     );
+  }
+
+  if (element.type === "compound_path") {
+    return pointBox(element.name ?? element.type, element.subpaths.flatMap((subpath) => subpath.points.flatMap((point) => [
+      { x: point.x, y: point.y },
+      point.leftX === undefined || point.leftY === undefined ? undefined : { x: point.leftX, y: point.leftY },
+      point.rightX === undefined || point.rightY === undefined ? undefined : { x: point.rightX, y: point.rightY }
+    ]).filter((point): point is { x: number; y: number } => Boolean(point))));
   }
 
   const size = element.size ?? 18;
@@ -337,15 +345,30 @@ function isPaintVisible(value: string | null | undefined): boolean {
 }
 
 function makeNextPrompt(prompt: string, improvements: string[], target: string | undefined): string {
+  const basePrompt = baseArtworkPrompt(prompt);
   const clipped = improvements.slice(0, 6).map((issue) => `- ${issue}`).join("\n");
   const targetSentence = target ? `Make the ${target} recognizable from the vector shapes alone. ` : "";
   return [
-    `Revise the Illustrator artwork for: ${prompt}`,
+    `Revise the Illustrator artwork for: ${basePrompt}`,
     `${targetSentence}Keep the original intent, but improve the current drawing before accepting it.`,
     "Fix these review findings:",
     clipped,
     "Return a complete updated scene with concrete named vector elements, stronger silhouette/framing, readable scale, and no label reliance."
   ].join("\n");
+}
+
+function baseArtworkPrompt(prompt: string): string {
+  let current = prompt.trim();
+  for (let depth = 0; depth < 6; depth += 1) {
+    const firstLine = current.split(/\r?\n/, 1)[0]?.trim() ?? "";
+    const match = firstLine.match(/^Revise the Illustrator artwork for:\s*(.+)$/i);
+    if (!match) {
+      return firstLine || current || "the requested artwork";
+    }
+    current = match[1].trim();
+  }
+
+  return current || "the requested artwork";
 }
 
 function scoreCheck(check: ArtworkReviewCheck): number {

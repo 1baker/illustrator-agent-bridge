@@ -7,22 +7,45 @@ import { detectIllustratorApps, probeIllustratorCommunication } from "../bridge/
 import { createGeneratedJob } from "../bridge/jobs.js";
 import { generatedJobSummary } from "../bridge/jsxGenerator.js";
 import { launchJsxJob, resolveLaunchPlatform } from "../bridge/launcher.js";
-import { driveIllustratorMouse } from "../bridge/mouseAutomation.js";
+import { driveIllustratorMouse, drivePhotoshopMouse } from "../bridge/mouseAutomation.js";
+import { detectPhotoshopDesktop } from "../bridge/photoshopProbe.js";
 import { normalizeJobId, readJobStatus, waitForJobResult } from "../bridge/results.js";
 import { normalizeScene } from "../bridge/validation.js";
 import { callIllustratorTool, getIllustratorMcpConfig, listIllustratorTools } from "../mcp/illustratorClient.js";
 import { planObjectShapeScene } from "../planner/objectShapePlanner.js";
 import { planCartoonSceneWithMode } from "../planner/plannerRouter.js";
 import { planScientificConceptScene } from "../planner/scientificConceptPlanner.js";
+import { createAuraCallExternalArtworkReviewRunner, detectAuraCallChatGptBrowser } from "../qa/auracallExternalArtworkJudge.js";
 import { reviewArtworkQuality } from "../qa/artworkReviewGuard.js";
 import { inspectExportArtifact } from "../qa/exportQa.js";
 import { guardObjectShapeScene } from "../qa/objectShapeGuard.js";
 import { loadDefaultCorpus, searchCorpus } from "../semantic/search.js";
 import { inspectVectorShapeFiles } from "../semantic/vectorShapeIngest.js";
+import { executeAdobeProjectWorkflow } from "../workflow/adobeProjectWorkflow.js";
+import { preflightAdobeProjectWorkflow } from "../workflow/adobeProjectPreflight.js";
+import { executeAdobeSvgProofWorkflow } from "../workflow/adobeSvgProofWorkflow.js";
 import { executeCartoonWorkflow } from "../workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow } from "../workflow/objectExecutor.js";
 import { prepareCartoonWorkflow } from "../workflow/cartoonWorkflow.js";
 import { prepareObjectShapeWorkflow } from "../workflow/objectWorkflow.js";
+import { renderSceneToSvg } from "../render/svgRenderer.js";
+import { renderSceneToTikz } from "../render/tikzRenderer.js";
+import { renderScientificPlotToPgfplots } from "../render/pgfplotsRenderer.js";
+import { renderSceneToPng } from "../render/pngRenderer.js";
+import { composeRasterLayersToPng } from "../render/rasterCompositor.js";
+import { compileScientificFigure } from "../scientific/figureCompiler.js";
+import { planScientificStory } from "../scientific/storyPlanner.js";
+import { parseScientificText } from "../scientific/textStoryParser.js";
+import { constructPolygonBoolean } from "../core/polygonBoolean.js";
+import { flattenBezierPath } from "../core/bezierFlattening.js";
+import { expandStroke } from "../core/strokeExpansion.js";
+import { placePathMarkers } from "../core/pathMarkers.js";
+import { compileScientificPlot } from "../core/scientificPlot.js";
+import { generateScientificImage } from "../scientific/imageGenerator.js";
+import { generateScientificFigureProject } from "../scientific/figureProjectGenerator.js";
+import { planScientificPromptFigure } from "../scientific/promptFigureWorkflow.js";
+import { approveScientificFigureBrief, approveScientificFigureFinal } from "../scientific/figureProject.js";
+import { generateProposalVisualPackage, serializeProposalVisualPackage } from "../proposal/proposalVisualWorkflow.js";
 
 const optionalRootSchema = z.string().min(1).optional();
 const optionalUrlSchema = z.string().url().optional();
@@ -35,6 +58,9 @@ const mouseButtonSchema = z.enum(["left", "right"]).optional();
 const plannerModeSchema = z.enum(["deterministic", "auto", "openai"]).optional();
 const objectShapeTargetSchema = z.enum(["cat", "lock", "key"]);
 const objectWorkflowRunModeSchema = z.enum(["launch", "com"]).optional();
+const adobeArtworkIntentSchema = z.enum(["auto", "cartoon", "scientific", "object"]).optional();
+const adobeSvgProofRunModeSchema = z.enum(["launch", "com"]).optional();
+const externalReviewProviderSchema = z.enum(["manual", "auracall"]).optional();
 const semanticKindSchema = z
   .enum([
     "object_semantics",
@@ -57,8 +83,8 @@ export function createAgentMcpServer(): McpServer {
     },
     {
       instructions:
-        "Use these tools to communicate with Adobe Illustrator through either Illustrator Beta MCP or generated ExtendScript jobs. " +
-        "Prefer Illustrator Beta MCP when configured. Use generated JSX jobs when direct MCP is unavailable."
+        "Use generate_proposal_visuals when a proposal contains explicit proposal-visual declarations for figures, plots, or tables. Use generate_scientific_image as the unified Adobe-independent entrypoint for reviewed-brief, figure, story, controlled-text, and numerical-plot requests, including editable TikZ or PGFPlots LaTeX. The narrower generate_scientific_figure_from_text, generate_scientific_story, generate_scientific_plot, generate_scientific_pgfplots, and render_vector_scene_tikz tools remain available for callers that need their specialized contracts. Use place_path_markers for tangent-aligned scientific terminators, flatten_bezier_path for explicit-tolerance curve approximation, expand_vector_stroke for filled stroke outlines, construct_polygon_boolean for union/intersection/difference/xor, render_vector_scene_png for one derived raster artifact, and compose_vector_scene_layers_png for ordered layers, opacity, masks, and blend modes. " +
+        "Use the Adobe tools only when the caller explicitly needs Illustrator or Photoshop as an optional editing or export adapter."
     }
   );
 
@@ -187,6 +213,84 @@ export function createAgentMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "detect_photoshop_desktop",
+    {
+      title: "Detect Photoshop Desktop",
+      description:
+        "Read Photoshop COM registration, executable path, running process state, and recent Windows crash events before running Photoshop COM automation.",
+      inputSchema: {
+        platform: launchPlatformSchema,
+        crashLookbackMinutes: z.number().int().min(1).max(1440).optional(),
+        timeoutMs: z.number().int().min(1000).max(120_000).optional()
+      }
+    },
+    async ({ platform, crashLookbackMinutes, timeoutMs }) => {
+      const result = await detectPhotoshopDesktop({ platform, crashLookbackMinutes, timeoutMs });
+      return jsonToolResult(result);
+    }
+  );
+
+  server.registerTool(
+    "detect_chatgpt_browser",
+    {
+      title: "Detect ChatGPT Browser",
+      description:
+        "Run AuraCall doctor for the managed ChatGPT browser and report whether browser-backed external review can run.",
+      inputSchema: {
+        auracallCommand: z.string().min(1).max(1000).optional(),
+        timeoutSeconds: z.number().int().min(1).max(300).optional()
+      }
+    },
+    async ({ auracallCommand, timeoutSeconds }) => {
+      const result = await detectAuraCallChatGptBrowser({ command: auracallCommand, timeoutSeconds, workdir: process.cwd() });
+      return jsonToolResult(result);
+    }
+  );
+
+  server.registerTool(
+    "preflight_adobe_project_workflow",
+    {
+      title: "Preflight Adobe Project Workflow",
+      description:
+        "Read-only prerequisite check for Illustrator, Photoshop COM, and optional AuraCall ChatGPT browser review before running the full Adobe project workflow.",
+      inputSchema: {
+        platform: launchPlatformSchema,
+        photoshopPlatform: launchPlatformSchema,
+        photoshopCrashLookbackMinutes: z.number().int().min(0).max(1440).optional(),
+        photoshopTimeoutMs: z.number().int().min(1000).max(120_000).optional(),
+        requireChatGptBrowser: z.boolean().optional(),
+        externalReviewProvider: externalReviewProviderSchema,
+        auracallCommand: z.string().min(1).max(1000).optional(),
+        chatGptTimeoutSeconds: z.number().int().min(1).max(300).optional(),
+        chatGptOperationTimeoutSeconds: z.number().int().min(1).max(300).optional()
+      }
+    },
+    async ({
+      platform,
+      photoshopPlatform,
+      photoshopCrashLookbackMinutes,
+      photoshopTimeoutMs,
+      requireChatGptBrowser,
+      externalReviewProvider,
+      auracallCommand,
+      chatGptTimeoutSeconds,
+      chatGptOperationTimeoutSeconds
+    }) => {
+      const result = await preflightAdobeProjectWorkflow({
+        illustratorPlatform: platform,
+        photoshopPlatform,
+        photoshopCrashLookbackMinutes,
+        photoshopTimeoutMs,
+        requireChatGptBrowser: requireChatGptBrowser || externalReviewProvider === "auracall",
+        auracallCommand,
+        chatGptTimeoutSeconds,
+        chatGptOperationTimeoutSeconds
+      });
+      return jsonToolResult(result);
+    }
+  );
+
+  server.registerTool(
     "probe_illustrator_communication",
     {
       title: "Probe Illustrator Communication",
@@ -278,11 +382,13 @@ export function createAgentMcpServer(): McpServer {
         toX: z.number().min(0).max(1).optional(),
         toY: z.number().min(0).max(1).optional(),
         durationMs: z.number().int().min(0).max(30_000).optional(),
+        toolShortcut: z.string().min(1).max(40).optional(),
+        toolShortcutDelayMs: z.number().int().min(0).max(10_000).optional(),
         windowTitlePattern: z.string().min(1).max(200).optional(),
         dryRun: z.boolean().optional()
       }
     },
-    async ({ platform, action, button, x, y, toX, toY, durationMs, windowTitlePattern, dryRun }) => {
+    async ({ platform, action, button, x, y, toX, toY, durationMs, toolShortcut, toolShortcutDelayMs, windowTitlePattern, dryRun }) => {
       const result = await driveIllustratorMouse({
         platform: resolveLaunchPlatform(platform),
         action,
@@ -292,6 +398,48 @@ export function createAgentMcpServer(): McpServer {
         endRelativeX: toX,
         endRelativeY: toY,
         durationMs,
+        toolShortcut,
+        toolShortcutDelayMs,
+        windowTitlePattern,
+        dryRun
+      });
+      return jsonToolResult(result);
+    }
+  );
+
+  server.registerTool(
+    "drive_photoshop_mouse",
+    {
+      title: "Drive Photoshop Mouse",
+      description:
+        "Move, click, double-click, or drag the actual Windows mouse relative to the detected Photoshop window. Use dryRun first; live runs fail unless Photoshop can be focused or the target point is confirmed to belong to Photoshop.",
+      inputSchema: {
+        platform: launchPlatformSchema,
+        action: mouseActionSchema,
+        button: mouseButtonSchema,
+        x: z.number().min(0).max(1).optional(),
+        y: z.number().min(0).max(1).optional(),
+        toX: z.number().min(0).max(1).optional(),
+        toY: z.number().min(0).max(1).optional(),
+        durationMs: z.number().int().min(0).max(30_000).optional(),
+        toolShortcut: z.string().min(1).max(40).optional(),
+        toolShortcutDelayMs: z.number().int().min(0).max(10_000).optional(),
+        windowTitlePattern: z.string().min(1).max(200).optional(),
+        dryRun: z.boolean().optional()
+      }
+    },
+    async ({ platform, action, button, x, y, toX, toY, durationMs, toolShortcut, toolShortcutDelayMs, windowTitlePattern, dryRun }) => {
+      const result = await drivePhotoshopMouse({
+        platform: resolveLaunchPlatform(platform),
+        action,
+        button,
+        relativeX: x,
+        relativeY: y,
+        endRelativeX: toX,
+        endRelativeY: toY,
+        durationMs,
+        toolShortcut,
+        toolShortcutDelayMs,
         windowTitlePattern,
         dryRun
       });
@@ -407,6 +555,305 @@ export function createAgentMcpServer(): McpServer {
         minWidth,
         minHeight,
         minNonBlankRatio,
+        root
+      });
+      return jsonToolResult(execution);
+    }
+  );
+
+  server.registerTool(
+    "execute_adobe_svg_proof_workflow",
+    {
+      title: "Execute Illustrator SVG With Photoshop Proof",
+      description:
+        "Take a natural-language prompt, plan editable Illustrator vector artwork, export SVG, run Photoshop via COM to rasterize the SVG as a PNG proof, and run QA/review on the proof.",
+      inputSchema: {
+        prompt: z.string().min(1).max(1500),
+        outputPath: z.string().min(1).max(1000),
+        proofPngPath: z.string().min(1).max(1000).optional(),
+        intent: adobeArtworkIntentSchema,
+        width: z.number().int().min(360).max(14400).optional(),
+        height: z.number().int().min(240).max(14400).optional(),
+        title: z.string().min(1).max(120).optional(),
+        planner: plannerModeSchema,
+        model: z.string().min(1).max(120).optional(),
+        proofWidth: z.number().int().min(1).max(30000).optional(),
+        proofHeight: z.number().int().min(1).max(30000).optional(),
+        proofResolution: z.number().min(1).max(2400).optional(),
+        illustratorRunMode: adobeSvgProofRunModeSchema,
+        platform: launchPlatformSchema,
+        photoshopPlatform: launchPlatformSchema,
+        appPath: z.string().min(1).max(1000).optional(),
+        dryRun: z.boolean().optional(),
+        waitForResults: z.boolean().optional(),
+        timeoutMs: z.number().int().min(0).max(600_000).optional(),
+        intervalMs: z.number().int().min(100).max(60_000).optional(),
+        skipQa: z.boolean().optional(),
+        skipArtworkReview: z.boolean().optional(),
+        minBytes: z.number().int().min(0).optional(),
+        minWidth: z.number().int().min(1).optional(),
+        minHeight: z.number().int().min(1).optional(),
+        minNonBlankRatio: z.number().min(0).max(1).optional(),
+        proofMinWidth: z.number().int().min(1).optional(),
+        proofMinHeight: z.number().int().min(1).optional(),
+        proofMinNonBlankRatio: z.number().min(0).max(1).optional(),
+        maxReviewIterations: z.number().int().min(1).max(10).optional(),
+        root: optionalRootSchema
+      }
+    },
+    async ({
+      prompt,
+      outputPath,
+      proofPngPath,
+      intent,
+      width,
+      height,
+      title,
+      planner,
+      model,
+      proofWidth,
+      proofHeight,
+      proofResolution,
+      illustratorRunMode,
+      platform: launchPlatform,
+      photoshopPlatform,
+      appPath,
+      dryRun,
+      waitForResults,
+      timeoutMs,
+      intervalMs,
+      skipQa,
+      skipArtworkReview,
+      minBytes,
+      minWidth,
+      minHeight,
+      minNonBlankRatio,
+      proofMinWidth,
+      proofMinHeight,
+      proofMinNonBlankRatio,
+      maxReviewIterations,
+      root
+    }) => {
+      const execution = await executeAdobeSvgProofWorkflow({
+        prompt,
+        outputPath,
+        proofPngPath,
+        intent,
+        width,
+        height,
+        title,
+        plannerMode: planner,
+        openAiModel: model,
+        proofWidth,
+        proofHeight,
+        proofResolution,
+        illustratorRunMode,
+        launchPlatform,
+        photoshopPlatform,
+        appPath,
+        dryRun,
+        waitForResults,
+        timeoutMs,
+        intervalMs,
+        skipQa,
+        skipArtworkReview,
+        minBytes,
+        minWidth,
+        minHeight,
+        minNonBlankRatio,
+        proofMinWidth,
+        proofMinHeight,
+        proofMinNonBlankRatio,
+        maxReviewIterations,
+        root
+      });
+      return jsonToolResult(execution);
+    }
+  );
+
+  server.registerTool(
+    "execute_adobe_project_workflow",
+    {
+      title: "Execute Illustrator And Photoshop Project Workflow",
+      description:
+        "Run a full Illustrator -> Photoshop -> Illustrator project handoff: editable Illustrator vector scene, source SVG export, Photoshop layered PSD/PNG/SVG handoff pass, Illustrator SVG handoff placement, final SVG export, and QA/review.",
+      inputSchema: {
+        prompt: z.string().min(1).max(1500),
+        outputPath: z.string().min(1).max(1000),
+        sourceSvgPath: z.string().min(1).max(1000).optional(),
+        photoshopReferencePngPath: z.string().min(1).max(1000).optional(),
+        photoshopHandoffSvgPath: z.string().min(1).max(1000).optional(),
+        photoshopWorkingPsdPath: z.string().min(1).max(1000).optional(),
+        photoshopFeedbackPath: z.string().min(1).max(1000).optional(),
+        intent: adobeArtworkIntentSchema,
+        width: z.number().int().min(360).max(14400).optional(),
+        height: z.number().int().min(240).max(14400).optional(),
+        title: z.string().min(1).max(120).optional(),
+        planner: plannerModeSchema,
+        model: z.string().min(1).max(120).optional(),
+        proofWidth: z.number().int().min(1).max(30000).optional(),
+        proofHeight: z.number().int().min(1).max(30000).optional(),
+        proofResolution: z.number().min(1).max(2400).optional(),
+        referenceOpacity: z.number().min(0).max(100).optional(),
+        embedReference: z.boolean().optional(),
+        visibleMouseProof: z.boolean().optional(),
+        visibleMouseDurationMs: z.number().int().min(0).max(30_000).optional(),
+        illustratorMouseToolShortcut: z.string().min(1).max(40).optional(),
+        photoshopMouseToolShortcut: z.string().min(1).max(40).optional(),
+        illustratorMouseWindowTitlePattern: z.string().min(1).max(200).optional(),
+        photoshopMouseWindowTitlePattern: z.string().min(1).max(200).optional(),
+        illustratorRunMode: adobeSvgProofRunModeSchema,
+        platform: launchPlatformSchema,
+        photoshopPlatform: launchPlatformSchema,
+        appPath: z.string().min(1).max(1000).optional(),
+        dryRun: z.boolean().optional(),
+        waitForResults: z.boolean().optional(),
+        timeoutMs: z.number().int().min(0).max(600_000).optional(),
+        intervalMs: z.number().int().min(100).max(60_000).optional(),
+        skipQa: z.boolean().optional(),
+        skipArtworkReview: z.boolean().optional(),
+        minBytes: z.number().int().min(0).optional(),
+        minWidth: z.number().int().min(1).optional(),
+        minHeight: z.number().int().min(1).optional(),
+        minNonBlankRatio: z.number().min(0).max(1).optional(),
+        proofMinWidth: z.number().int().min(1).optional(),
+        proofMinHeight: z.number().int().min(1).optional(),
+        proofMinNonBlankRatio: z.number().min(0).max(1).optional(),
+        maxReviewIterations: z.number().int().min(1).max(10).optional(),
+        externalReviewProvider: externalReviewProviderSchema,
+        externalReviewPacketPath: z.string().min(1).max(1000).optional(),
+        externalReviewVerdict: z.unknown().optional(),
+        requireExternalReviewPass: z.boolean().optional(),
+        externalReviewMinScore: z.number().min(0).max(100).optional(),
+        externalReviewModel: z.string().min(1).max(120).optional(),
+        externalReviewTimeoutSeconds: z.number().int().min(1).max(7200).optional(),
+        externalReviewPreflight: z.boolean().optional(),
+        externalReviewPreflightTimeoutSeconds: z.number().int().min(1).max(300).optional(),
+        externalReviewOutputPath: z.string().min(1).max(1000).optional(),
+        reviewReportPath: z.string().min(1).max(1000).optional(),
+        auracallCommand: z.string().min(1).max(1000).optional(),
+        root: optionalRootSchema
+      }
+    },
+    async ({
+      prompt,
+      outputPath,
+      sourceSvgPath,
+      photoshopReferencePngPath,
+      photoshopHandoffSvgPath,
+      photoshopWorkingPsdPath,
+      photoshopFeedbackPath,
+      intent,
+      width,
+      height,
+      title,
+      planner,
+      model,
+      proofWidth,
+      proofHeight,
+      proofResolution,
+      referenceOpacity,
+      embedReference,
+      visibleMouseProof,
+      visibleMouseDurationMs,
+      illustratorMouseToolShortcut,
+      photoshopMouseToolShortcut,
+      illustratorMouseWindowTitlePattern,
+      photoshopMouseWindowTitlePattern,
+      illustratorRunMode,
+      platform: launchPlatform,
+      photoshopPlatform,
+      appPath,
+      dryRun,
+      waitForResults,
+      timeoutMs,
+      intervalMs,
+      skipQa,
+      skipArtworkReview,
+      minBytes,
+      minWidth,
+      minHeight,
+      minNonBlankRatio,
+      proofMinWidth,
+      proofMinHeight,
+      proofMinNonBlankRatio,
+      maxReviewIterations,
+      externalReviewProvider,
+      externalReviewPacketPath,
+      externalReviewVerdict,
+      requireExternalReviewPass,
+      externalReviewMinScore,
+      externalReviewModel,
+      externalReviewTimeoutSeconds,
+      externalReviewPreflight,
+      externalReviewPreflightTimeoutSeconds,
+      externalReviewOutputPath,
+      reviewReportPath,
+      auracallCommand,
+      root
+    }) => {
+      const externalReview =
+        externalReviewProvider === "auracall"
+          ? createAuraCallExternalArtworkReviewRunner({
+              command: auracallCommand,
+              model: externalReviewModel,
+              timeoutSeconds: externalReviewTimeoutSeconds,
+              workdir: process.cwd(),
+              packetPath: externalReviewPacketPath,
+              outputPath: externalReviewOutputPath,
+              preflightBrowserReadiness: externalReviewPreflight ?? true,
+              preflightTimeoutSeconds: externalReviewPreflightTimeoutSeconds
+            })
+          : undefined;
+      const execution = await executeAdobeProjectWorkflow({
+        prompt,
+        outputPath,
+        sourceSvgPath,
+        photoshopReferencePngPath,
+        photoshopHandoffSvgPath,
+        photoshopWorkingPsdPath,
+        photoshopFeedbackPath,
+        intent,
+        width,
+        height,
+        title,
+        plannerMode: planner,
+        openAiModel: model,
+        proofWidth,
+        proofHeight,
+        proofResolution,
+        referenceOpacity,
+        embedReference,
+        visibleMouseProof,
+        visibleMouseDurationMs,
+        illustratorMouseToolShortcut,
+        photoshopMouseToolShortcut,
+        illustratorMouseWindowTitlePattern,
+        photoshopMouseWindowTitlePattern,
+        illustratorRunMode,
+        launchPlatform,
+        photoshopPlatform,
+        appPath,
+        dryRun,
+        waitForResults,
+        timeoutMs,
+        intervalMs,
+        skipQa,
+        skipArtworkReview,
+        minBytes,
+        minWidth,
+        minHeight,
+        minNonBlankRatio,
+        proofMinWidth,
+        proofMinHeight,
+        proofMinNonBlankRatio,
+        maxReviewIterations,
+        externalReview,
+        externalReviewPacketPath,
+        externalReviewVerdict,
+        requireExternalReviewPass: requireExternalReviewPass || externalReviewProvider === "auracall",
+        externalReviewMinScore,
+        reviewReportPath,
         root
       });
       return jsonToolResult(execution);
@@ -560,6 +1007,301 @@ export function createAgentMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "render_vector_scene_png",
+    {
+      title: "Render a Vector Scene to PNG",
+      description:
+        "Validate a renderer-independent vector scene, including reusable linear and radial fill or stroke paints, and rasterize it locally into a derived PNG pixel artifact without launching Photoshop or Illustrator.",
+      inputSchema: {
+        scene: z.unknown(),
+        width: z.number().int().min(1).max(14400).optional(),
+        height: z.number().int().min(1).max(14400).optional(),
+        scale: z.number().min(0.1).max(8).optional(),
+        background: z.string().min(1).max(20).optional()
+      }
+    },
+    async ({ scene, width, height, scale, background }) => {
+      const rendered = renderSceneToPng(scene, { width, height, scale, background });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: true,
+              sourceWidth: rendered.sourceWidth,
+              sourceHeight: rendered.sourceHeight,
+              width: rendered.width,
+              height: rendered.height,
+              bytes: rendered.png.length,
+              background: rendered.background,
+              fit: rendered.fit,
+              fontPolicy: rendered.fontPolicy,
+              renderer: rendered.renderer
+            }, null, 2)
+          },
+          { type: "image" as const, data: rendered.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "compose_vector_scene_layers_png",
+    {
+      title: "Compose Vector Scene Layers to PNG",
+      description:
+        "Stack validated vector scenes as ordered layers with visibility, opacity, binary vector masks, and bounded blend modes, then rasterize locally without Photoshop or Illustrator.",
+      inputSchema: {
+        composition: z.unknown(),
+        width: z.number().int().min(1).max(14400).optional(),
+        height: z.number().int().min(1).max(14400).optional(),
+        scale: z.number().min(0.1).max(8).optional(),
+        background: z.string().min(1).max(20).optional()
+      }
+    },
+    async ({ composition, width, height, scale, background }) => {
+      const rendered = composeRasterLayersToPng(composition, { width, height, scale, background });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: true,
+              width: rendered.width,
+              height: rendered.height,
+              bytes: rendered.png.length,
+              layerCount: rendered.layerCount,
+              visibleLayerCount: rendered.visibleLayerCount,
+              background: rendered.background,
+              fit: rendered.fit,
+              fontPolicy: rendered.fontPolicy,
+              renderer: rendered.renderer
+            }, null, 2)
+          },
+          { type: "image" as const, data: rendered.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "approve_scientific_figure_brief",
+    { title: "Approve a Scientific Figure Brief", description: "Record an explicit human brief approval bound to the current semantic SHA-256 digest. Any later semantic, source, layout, or registry-provenance change makes the approval stale.", inputSchema: { project: z.unknown(), reviewer: z.string().min(1), reviewedAt: z.string().min(1) } },
+    async ({ project, reviewer, reviewedAt }) => jsonToolResult({ ok: true, project: approveScientificFigureBrief(project, reviewer, reviewedAt) })
+  );
+
+  server.registerTool(
+    "approve_scientific_figure_final",
+    { title: "Approve a Final Scientific Figure", description: "Record explicit human final approval bound to the current semantic, artifact, manifest, QA, and analysis digests.", inputSchema: { project: z.unknown(), evidence: z.unknown(), reviewer: z.string().min(1), reviewedAt: z.string().min(1) } },
+    async ({ project, evidence, reviewer, reviewedAt }) => jsonToolResult({ ok: true, project: approveScientificFigureFinal(project, evidence as Parameters<typeof approveScientificFigureFinal>[1], reviewer, reviewedAt) })
+  );
+
+  server.registerTool(
+    "plan_publication_figure_from_prompt",
+    {
+      title: "Plan a Publication Figure from One Prompt",
+      description: "Plan scientific semantics from a plain prompt, retrieve approved presentation-only grammar, deterministically build editable scene/TikZ/SVG/PNG candidates, run measured scene QA, and stop at digest-bound human brief approval. The tool never fabricates data or approves its own output.",
+      inputSchema: { request: z.unknown(), registryRoot: z.string().min(1).optional() }
+    },
+    async ({ request, registryRoot }) => {
+      const generated = await planScientificPromptFigure(request, { registryRoot });
+      return { content: [
+        { type: "text" as const, text: JSON.stringify({ ok: true, status: generated.status, nextGate: generated.nextGate, requestDigest: generated.requestDigest, planner: generated.planner, presentationRetrieval: generated.presentationRetrieval, project: generated.project, semanticDigest: generated.semanticDigest, qa: generated.qa, preview: generated.preview ? { manifest: generated.preview.manifest, intermediate: generated.preview.intermediate, scene: generated.preview.scene, svg: generated.preview.svg, latex: generated.preview.latex } : undefined }, null, 2) },
+        ...(generated.preview ? [{ type: "image" as const, data: generated.preview.png.png.toString("base64"), mimeType: "image/png" as const }] : [])
+      ] };
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_image",
+    {
+      title: "Generate a Scientific Image",
+      description:
+        "Use one fail-closed software contract to compile a reviewed figure brief, figure specification, typed story, controlled text, or numerical plot into a semantic vector scene, editable SVG, editable TikZ or PGFPlots LaTeX, derived PNG, stage provenance, and digest manifest without Illustrator or Photoshop.",
+      inputSchema: { request: z.unknown() }
+    },
+    async ({ request }) => {
+      const generated = generateScientificImage(request);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ ok: true, manifest: generated.manifest, intermediate: generated.intermediate, scene: generated.scene, svg: generated.svg, latex: generated.latex }, null, 2)
+          },
+          { type: "image" as const, data: generated.png.png.toString("base64"), mimeType: "image/png" }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_figure_project",
+    {
+      title: "Generate a Scientific Figure Project",
+      description: "Compile a brief-approved ScientificFigureProject.v1 into deterministic multi-panel SVG, PDF, PNG, semantic JSON, editable LaTeX, analysis provenance, manifest, and publication QA. Supplied images remain immutable and Adobe is optional.",
+      inputSchema: { project: z.unknown(), assetRoot: z.string().min(1), runAnalysis: z.boolean().optional() }
+    },
+    async ({ project, assetRoot, runAnalysis }) => {
+      const generated = await generateScientificFigureProject(project, { assetRoot, runAnalysis });
+      return { content: [
+        { type: "text" as const, text: JSON.stringify({ ok: true, project: generated.project, manifest: generated.manifest, qa: generated.qa, semanticJson: generated.semanticJson, analysisJson: generated.analysisJson, svg: generated.svg, latex: generated.latex, pdfBase64: generated.pdf.toString("base64") }, null, 2) },
+        { type: "image" as const, data: generated.png.toString("base64"), mimeType: "image/png" }
+      ] };
+    }
+  );
+
+  server.registerTool(
+    "generate_proposal_visuals",
+    {
+      title: "Generate Proposal Figures and Tables",
+      description:
+        "Parse proposal-visual declarations, preserve their exact prompts, and route reviewed figures, numerical plots, and tables to TikZ, PGFPlots, LaTeX tables, or an explicit Illustrator-to-Photoshop SVG proof workflow.",
+      inputSchema: {
+        request: z.unknown(),
+        outputDir: z.string().min(1).optional(),
+        root: optionalRootSchema
+      }
+    },
+    async ({ request, outputDir, root }) => {
+      const generated = await generateProposalVisualPackage(request, { outputDir, root });
+      return {
+        content: [
+          { type: "text" as const, text: JSON.stringify({ ok: generated.ok, package: serializeProposalVisualPackage(generated, false) }, null, 2) },
+          ...generated.assets.flatMap((asset) => asset.renderer === "tikz" || asset.renderer === "pgfplots"
+            ? [{ type: "image" as const, data: asset.generated.png.png.toString("base64"), mimeType: "image/png" }]
+            : [])
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "render_vector_scene_tikz",
+    {
+      title: "Render a Vector Scene as TikZ",
+      description: "Render a validated semantic vector scene, including bounded linear and radial gradient fills, as standalone editable TikZ LaTeX without launching Adobe software. Unsupported paint transforms and gradient strokes fail closed.",
+      inputSchema: { scene: z.unknown() }
+    },
+    async ({ scene }) => jsonToolResult({ ok: true, ...renderSceneToTikz(scene) })
+  );
+
+  server.registerTool(
+    "generate_scientific_plot",
+    {
+      title: "Generate a Scientific Plot",
+      description:
+        "Compile bounded numerical line, scatter, and grouped-bar series with deterministic linear scales, ticks, labels, legends, clipping, and x/y uncertainty bars into a semantic vector scene and editable SVG without Adobe software.",
+      inputSchema: { plot: z.unknown() }
+    },
+    async ({ plot }) => {
+      const result = compileScientificPlot(plot);
+      return jsonToolResult({ ok: true, result, svg: renderSceneToSvg(result.scene) });
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_pgfplots",
+    {
+      title: "Generate a Scientific PGFPlots Document",
+      description: "Validate bounded numerical line, scatter, and grouped-bar data and emit standalone editable PGFPlots LaTeX with explicit compat 1.18, ticks, legends, and uncertainty bars.",
+      inputSchema: { plot: z.unknown() }
+    },
+    async ({ plot }) => {
+      const rendered = renderScientificPlotToPgfplots(plot);
+      return jsonToolResult({ ok: true, latex: rendered.latex, renderer: rendered.renderer, compat: rendered.compat, plot: rendered.plot });
+    }
+  );
+
+  server.registerTool(
+    "place_path_markers",
+    {
+      title: "Place Markers on a Vector Path",
+      description:
+        "Derive start, vertex, or end tangents and construct aligned arrowhead, inhibition-bar, circle, or diamond geometry without launching Adobe software.",
+      inputSchema: { request: z.unknown() }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: placePathMarkers(request) })
+  );
+
+  server.registerTool(
+    "expand_vector_stroke",
+    {
+      title: "Expand a Vector Stroke",
+      description:
+        "Compile a bounded line or cubic path stroke into canonical filled polygon geometry, including caps, joins, miter fallback, dashes, and explicit approximation tolerance, without launching Adobe software.",
+      inputSchema: { request: z.unknown() }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: expandStroke(request) })
+  );
+
+  server.registerTool(
+    "flatten_bezier_path",
+    {
+      title: "Flatten a Bezier Path",
+      description:
+        "Adaptively convert a bounded cubic Bezier path into straight segments using an explicit flatness tolerance, without launching Illustrator.",
+      inputSchema: {
+        request: z.unknown()
+      }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: flattenBezierPath(request) })
+  );
+
+  server.registerTool(
+    "construct_polygon_boolean",
+    {
+      title: "Construct Polygon Boolean Geometry",
+      description:
+        "Apply bounded union, intersection, difference, or xor to closed polygonal regions and return a canonical compound-path element without launching Illustrator.",
+      inputSchema: {
+        request: z.unknown()
+      }
+    },
+    async ({ request }) => jsonToolResult({ ok: true, result: constructPolygonBoolean(request) })
+  );
+
+  server.registerTool(
+    "generate_scientific_figure_from_text",
+    {
+      title: "Generate a Scientific Figure from Controlled Text",
+      description:
+        "Parse line-oriented controlled scientific statements into an auditable typed story, coordinate-free figure specification, validated semantic vector scene, and editable SVG without launching Adobe software.",
+      inputSchema: {
+        text: z.string().min(1).max(20000),
+        title: z.string().min(1).max(160).optional(),
+        subtitle: z.string().min(1).max(300).optional(),
+        width: z.number().min(500).max(14400).optional(),
+        height: z.number().min(400).max(14400).optional(),
+        direction: z.enum(["left_to_right", "top_to_bottom"]).optional(),
+        spacing: z.enum(["compact", "normal", "open"]).optional()
+      }
+    },
+    async ({ text, title, subtitle, width, height, direction, spacing }) => {
+      const parsed = parseScientificText({ text, title, subtitle, width, height, direction, spacing });
+      const figure = planScientificStory(parsed.story);
+      const scene = compileScientificFigure(figure);
+      return jsonToolResult({ ok: true, parsed, figure, scene, svg: renderSceneToSvg(scene) });
+    }
+  );
+
+  server.registerTool(
+    "generate_scientific_story",
+    {
+      title: "Generate a Software-Native Scientific Figure",
+      description:
+        "Convert typed scientific entities and interactions into an inferred coordinate-free figure specification, validated semantic vector scene, and editable SVG without launching Adobe software.",
+      inputSchema: {
+        story: z.unknown()
+      }
+    },
+    async ({ story }) => {
+      const figure = planScientificStory(story);
+      const scene = compileScientificFigure(figure);
+      return jsonToolResult({ ok: true, figure, scene, svg: renderSceneToSvg(scene) });
+    }
+  );
+
+  server.registerTool(
     "plan_scientific_concept_scene_job",
     {
       title: "Plan Scientific Concept Scene and Create JSX Job",
@@ -668,14 +1410,16 @@ export function createAgentMcpServer(): McpServer {
         jobId: z.string().min(1),
         platform: launchPlatformSchema,
         dryRun: z.boolean().optional(),
+        timeoutMs: z.number().int().min(0).max(600_000).optional(),
         root: optionalRootSchema
       }
     },
-    async ({ jobId, platform, dryRun, root }) => {
+    async ({ jobId, platform, dryRun, timeoutMs, root }) => {
       const { jobPath } = await getGeneratedJobPaths(normalizeJobId(jobId), root);
       const result = await runJsxViaIllustratorCom(jobPath, {
         platform: resolveLaunchPlatform(platform),
         dryRun,
+        timeoutMs,
         root
       });
       return jsonToolResult(result);
@@ -848,19 +1592,34 @@ export function createAgentMcpServer(): McpServer {
           mimeType: "application/json",
           text: JSON.stringify(
             {
-              preferredPath: "Illustrator Beta MCP when configured; generated JSX fallback otherwise.",
+              preferredPath: "Software-native controlled text or typed scientific story generation; Adobe adapters only when explicitly needed.",
               tools: [
                 "semantic_search_visual_knowledge",
                 "inspect_vector_shape_files",
                 "detect_illustrator_desktop",
                 "probe_illustrator_communication",
                 "drive_illustrator_mouse",
+                "drive_photoshop_mouse",
                 "prepare_cartoon_publication_workflow",
                 "execute_cartoon_publication_workflow",
+                "execute_adobe_svg_proof_workflow",
+                "execute_adobe_project_workflow",
                 "prepare_object_shape_workflow",
                 "execute_object_shape_workflow",
                 "plan_cartoon_scene_job",
                 "plan_scientific_concept_scene_job",
+                "render_vector_scene_png",
+                "render_vector_scene_tikz",
+                "compose_vector_scene_layers_png",
+                "generate_scientific_image",
+                "generate_scientific_plot",
+                "generate_scientific_pgfplots",
+                "place_path_markers",
+                "expand_vector_stroke",
+                "flatten_bezier_path",
+                "construct_polygon_boolean",
+                "generate_scientific_figure_from_text",
+                "generate_scientific_story",
                 "plan_object_shape_scene_job",
                 "guard_object_shape_scene",
                 "illustrator_beta_list_tools",
@@ -876,10 +1635,15 @@ export function createAgentMcpServer(): McpServer {
                 "review_artwork_quality"
               ],
               generatedJobContract: {
+                softwareRaster: "render_vector_scene_png derives one scene, including reusable linear and radial vector paints, as PNG; compose_vector_scene_layers_png adds ordered layers, opacity, binary vector masks, and blend modes. Photoshop is optional and the scenes/SVG remain authoritative.",
+                softwareGeometry: "generate_scientific_plot maps bounded numerical data through deterministic axes, ticks, marks, uncertainty, and legends; render_vector_scene_tikz preserves flat-color scene geometry as editable TikZ; generate_scientific_pgfplots preserves numerical plot semantics as editable PGFPlots; place_path_markers derives path tangents and creates scientific terminators; flatten_bezier_path adaptively converts cubic curves to line segments at a declared tolerance; expand_vector_stroke compiles width, caps, joins, and dashes into filled geometry; construct_polygon_boolean performs bounded region set operations.",
                 runInIllustrator: "File > Scripts > Other Script",
                 launchFromDesktop: "bridge_launch_job opens a generated JSX through the host OS when file association or app selection is configured.",
                 result: "Each generated JSX job writes a JSON result file.",
                 export: "Export jobs require an active Illustrator document.",
+                photoshopProof: "execute_adobe_svg_proof_workflow keeps Illustrator SVG as the editable source and uses Photoshop COM to rasterize a PNG proof for QA/review.",
+                photoshopProject:
+                  "execute_adobe_project_workflow runs an Illustrator -> Photoshop -> Illustrator handoff: source SVG, Photoshop layered PSD/PNG/feedback plus return SVG handoff, Illustrator SVG placement, final SVG. With visibleMouseProof true, the workflow drives the real mouse in Illustrator, Photoshop, and Illustrator again, and commits the Photoshop return SVG after the Photoshop mouse edit.",
                 qa: "Run qa_export_artifact for file checks, then review_artwork_quality to get a refinement prompt before accepting the artwork."
               }
             },

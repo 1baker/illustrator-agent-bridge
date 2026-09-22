@@ -1,0 +1,11 @@
+Title: Central dogma and particle delivery
+Subtitle: Plain controlled statements compiled into editable scientific vectors
+Direction: left-to-right
+Spacing: open
+Canvas: 1800x920
+
+DNA template [dna] converts to RNA transcript [rna].
+RNA transcript transports to mitochondrion [organelle].
+Reaction flask [apparatus] converts to nanoparticle [particle].
+Nanoparticle associates with lipid membrane [membrane].
+Lipid membrane transports to mitochondrion.

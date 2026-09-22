@@ -1,0 +1,131 @@
+{
+  "document": {
+    "title": "Geometry Basics: Lines, Paths, Stroke, and Fill",
+    "width": 900,
+    "height": 540,
+    "colorMode": "RGB"
+  },
+  "elements": [
+    {
+      "type": "rect",
+      "name": "background",
+      "x": 0,
+      "y": 0,
+      "width": 900,
+      "height": 540,
+      "style": { "fill": "#F8FAFC", "stroke": null }
+    },
+    {
+      "type": "text",
+      "name": "title",
+      "x": 50,
+      "y": 35,
+      "text": "From points to scientific shapes",
+      "size": 30,
+      "style": { "fill": "#0F172A", "stroke": null }
+    },
+    {
+      "type": "text",
+      "name": "line label",
+      "x": 70,
+      "y": 120,
+      "text": "1. Two endpoints define a line segment",
+      "size": 18,
+      "style": { "fill": "#334155", "stroke": null }
+    },
+    {
+      "type": "line",
+      "name": "line segment",
+      "x": 90,
+      "y": 180,
+      "x2": 330,
+      "y2": 180,
+      "style": { "stroke": "#2563EB", "strokeWidth": 6 }
+    },
+    {
+      "type": "ellipse",
+      "name": "start point",
+      "x": 80,
+      "y": 170,
+      "width": 20,
+      "height": 20,
+      "style": { "fill": "#DBEAFE", "stroke": "#1D4ED8", "strokeWidth": 3 }
+    },
+    {
+      "type": "ellipse",
+      "name": "end point",
+      "x": 320,
+      "y": 170,
+      "width": 20,
+      "height": 20,
+      "style": { "fill": "#DBEAFE", "stroke": "#1D4ED8", "strokeWidth": 3 }
+    },
+    {
+      "type": "text",
+      "name": "open path label",
+      "x": 500,
+      "y": 120,
+      "text": "2. Connected segments form an open path",
+      "size": 18,
+      "style": { "fill": "#334155", "stroke": null }
+    },
+    {
+      "type": "path",
+      "name": "open path",
+      "x": 0,
+      "y": 0,
+      "closed": false,
+      "points": [
+        { "x": 530, "y": 205 },
+        { "x": 610, "y": 155 },
+        { "x": 690, "y": 205 },
+        { "x": 770, "y": 155 }
+      ],
+      "style": { "fill": null, "stroke": "#7C3AED", "strokeWidth": 6 }
+    },
+    {
+      "type": "text",
+      "name": "empty shape label",
+      "x": 70,
+      "y": 285,
+      "text": "3. Closed path, no fill (transparent interior)",
+      "size": 18,
+      "style": { "fill": "#334155", "stroke": null }
+    },
+    {
+      "type": "path",
+      "name": "empty triangle",
+      "x": 0,
+      "y": 0,
+      "closed": true,
+      "points": [
+        { "x": 110, "y": 470 },
+        { "x": 210, "y": 330 },
+        { "x": 310, "y": 470 }
+      ],
+      "style": { "fill": null, "stroke": "#0F766E", "strokeWidth": 7 }
+    },
+    {
+      "type": "text",
+      "name": "filled shape label",
+      "x": 500,
+      "y": 285,
+      "text": "4. Same topology, now with a fill",
+      "size": 18,
+      "style": { "fill": "#334155", "stroke": null }
+    },
+    {
+      "type": "path",
+      "name": "filled triangle",
+      "x": 0,
+      "y": 0,
+      "closed": true,
+      "points": [
+        { "x": 540, "y": 470 },
+        { "x": 640, "y": 330 },
+        { "x": 740, "y": 470 }
+      ],
+      "style": { "fill": "#99F6E4", "stroke": "#0F766E", "strokeWidth": 7 }
+    }
+  ]
+}

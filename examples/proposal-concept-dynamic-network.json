@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "ProposalConceptPlan.v1",
+  "title": "Mechanism-to-property map for adaptable polymer networks",
+  "claim": "Independent chemistry and topology changes are tested against how networks rearrange and where performance trade-offs emerge.",
+  "seed": 260919,
+  "width": 1750,
+  "height": 1100,
+  "widthMm": 220,
+  "mechanism": {
+    "label": "Associative ester exchange",
+    "rateMeasurement": "Measure relaxation time"
+  },
+  "stages": [
+    {"id": "exchange", "title": "Tune exchange", "detail": "Catalyst tunes transesterification", "depiction": "exchange"},
+    {"id": "network", "title": "Build library", "detail": "Exchange timescale × strand density × flexible spacer", "depiction": "network"},
+    {"id": "measure", "title": "Test response", "detail": "Relaxation, creep, tensile, fracture", "depiction": "measurement"},
+    {"id": "decision", "title": "Model + transfer", "detail": "Model mechanism; transfer rules", "depiction": "decision"}
+  ],
+  "matrix": {
+    "title": "PROSPECTIVE NETWORK LIBRARY",
+    "rowLabel": "Exchange timescale",
+    "columnLabel": "Elastically active strand density",
+    "rows": ["slower", "matched Tg window", "faster"],
+    "columns": ["lower", "matched", "higher"]
+  },
+  "controls": ["Permanent-network control", "Matched uncrosslinked precursor", "Same thermal + mechanical history", "Interpret failure, not only success"],
+  "caption": "The project independently varies associative exchange kinetics and network topology, measures multiscale relaxation and failure, and tests whether a bounded mechanism-to-property map transfers across network families. Conceptual prospective schematic; not data.",
+  "sourceRefs": [
+    "ProposalWriter/proposals/2026-nsf-polymers-dynamic-network-mechanistic-map/source/actual-one-shot-request.md",
+    "ProposalWriter/proposals/2026-nsf-polymers-dynamic-network-mechanistic-map/working/figure-brief.md"
+  ]
+}

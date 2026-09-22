@@ -30,6 +30,12 @@ interface ScientificFeature {
 
 const FEATURES: ScientificFeature[] = [
   {
+    id: "core-shell-emulsion",
+    label: "core-shell emulsion polymerization",
+    query: "core shell emulsion polymerization seeded latex surfactant micelle initiator radical shell monomer feed",
+    pattern: /\b(core[- ]?shell|emulsion|latex|micelle|surfactant|initiator|seed(?:ed)?|shell monomer)\b/i
+  },
+  {
     id: "molecular-assembly",
     label: "molecular assembly",
     query: "molecular self assembly polymer supramolecular network monomer",
@@ -77,10 +83,11 @@ export function planScientificConceptScene(
     throw new Error("Prompt is required to plan a scientific concept scene.");
   }
 
-  const features = inferFeatures(trimmedPrompt);
-  const conceptQueries = buildConceptQueries(trimmedPrompt, features);
+  const conceptPrompt = baseScientificPrompt(trimmedPrompt);
+  const features = inferFeatures(conceptPrompt);
+  const conceptQueries = buildConceptQueries(conceptPrompt, features);
   const evidence = collectEvidence(conceptQueries, corpus, options.evidenceLimit ?? 12);
-  const scene = buildScientificScene(trimmedPrompt, features, evidence, options);
+  const scene = buildScientificScene(conceptPrompt, features, evidence, options);
   const qa = qaCartoonScene(scene);
 
   return {
@@ -139,6 +146,10 @@ function buildScientificScene(
   evidence: SemanticSearchResult[],
   options: ScientificConceptPlanOptions
 ): CartoonScene {
+  if (features.some((feature) => feature.id === "core-shell-emulsion")) {
+    return buildCoreShellEmulsionScene(prompt, evidence, options);
+  }
+
   const width = options.width ?? 960;
   const height = options.height ?? 640;
   const title = options.title ?? titleFromPrompt(prompt);
@@ -175,6 +186,212 @@ function buildScientificScene(
     },
     elements
   };
+}
+
+function buildCoreShellEmulsionScene(
+  prompt: string,
+  _evidence: SemanticSearchResult[],
+  options: ScientificConceptPlanOptions
+): CartoonScene {
+  const width = options.width ?? 1400;
+  const height = options.height ?? 900;
+  const title = options.title ?? titleFromPrompt(prompt);
+  const stageTop = 170;
+  const stageWidth = 300;
+  const stageHeight = 390;
+  const stageGap = 34;
+  const stage1X = 54;
+  const stage2X = stage1X + stageWidth + stageGap;
+  const stage3X = stage2X + stageWidth + stageGap;
+  const finalX = stage3X + stageWidth + 42;
+  const finalWidth = Math.max(270, width - finalX - 54);
+  const elements: SceneElement[] = [
+    rect("background", 0, 0, width, height, "#F7FAFC", null, 0),
+    rect("title band", 32, 24, width - 64, 100, "#FFFFFF", "#0F172A", 3),
+    text("concept title", 54, 62, title, 28, "#0F172A"),
+    text("concept subtitle", 54, 96, "Two-stage seeded emulsion polymerization creates a polymer core, then grows a chemically distinct shell.", 16, "#475569"),
+    ...stagePanel("stage 1 panel", stage1X, stageTop, stageWidth, stageHeight, "1. Seed latex + pre-emulsion", "#DBEAFE"),
+    ...stagePanel("stage 2 panel", stage2X, stageTop, stageWidth, stageHeight, "2. Core polymerization", "#DCFCE7"),
+    ...stagePanel("stage 3 panel", stage3X, stageTop, stageWidth, stageHeight, "3. Shell monomer feed", "#FEF3C7"),
+    ...arrow("stage 1 to stage 2 arrow", stage1X + stageWidth + 10, stageTop + 190, stage2X - 12, stageTop + 190, "#0F172A"),
+    ...arrow("stage 2 to stage 3 arrow", stage2X + stageWidth + 10, stageTop + 190, stage3X - 12, stageTop + 190, "#0F172A"),
+    ...arrow("stage 3 to final arrow", stage3X + stageWidth + 8, stageTop + 190, finalX - 18, stageTop + 190, "#0F172A"),
+    ...seedLatexStage(stage1X, stageTop, stageWidth, stageHeight),
+    ...coreGrowthStage(stage2X, stageTop, stageWidth, stageHeight),
+    ...shellFeedStage(stage3X, stageTop, stageWidth, stageHeight),
+    ...finalCoreShellParticle(finalX, stageTop, finalWidth, stageHeight),
+    ...processControlsBand(54, stageTop + stageHeight + 42, width - 108),
+    ...legendBand(54, height - 132, width - 108)
+  ];
+
+  return {
+    document: {
+      title,
+      width,
+      height,
+      colorMode: "RGB"
+    },
+    elements
+  };
+}
+
+function stagePanel(name: string, x: number, y: number, width: number, height: number, label: string, fill: string): SceneElement[] {
+  return [
+    rect(name, x, y, width, height, fill, "#0F172A", 3, 72),
+    rect(`${name} header`, x, y, width, 48, "#FFFFFF", "#0F172A", 2, 96),
+    text(`${name} title`, x + 18, y + 31, label, 16, "#0F172A")
+  ];
+}
+
+function seedLatexStage(x: number, y: number, width: number, height: number): SceneElement[] {
+  const waterY = y + 72;
+  const elements: SceneElement[] = [
+    rect("stage 1 aqueous phase", x + 22, waterY, width - 44, height - 102, "#BAE6FD", "#0284C7", 2, 58),
+    text("water phase label", x + 42, waterY + 34, "water phase", 14, "#075985"),
+    ellipse("monomer droplet A", x + 42, waterY + 146, 92, 76, "#FDE68A", "#92400E", 3, 82),
+    ellipse("monomer droplet B", x + 176, waterY + 138, 82, 68, "#FED7AA", "#9A3412", 3, 82),
+    ellipse("seed latex particle 1", x + 104, waterY + 222, 54, 54, "#93C5FD", "#1E40AF", 3),
+    ellipse("seed latex particle 2", x + 202, waterY + 232, 44, 44, "#93C5FD", "#1E40AF", 3),
+    ellipse("initiator radical source", x + width - 78, waterY + 54, 34, 34, "#F87171", "#991B1B", 3),
+    text("radical label", x + width - 84, waterY + 49, "I*", 14, "#991B1B")
+  ];
+
+  elements.push(...surfactantMicelle("surfactant micelle cluster 1", x + 78, waterY + 86, 28));
+  elements.push(...surfactantMicelle("surfactant micelle cluster 2", x + 150, waterY + 78, 26));
+  elements.push(...surfactantCorona("droplet A surfactant", x + 88, waterY + 184, 54, 8, "#0E7490"));
+  elements.push(...surfactantCorona("droplet B surfactant", x + 217, waterY + 172, 48, 7, "#0E7490"));
+  elements.push(line("surfactant micelles label leader", x + 244, waterY + 34, x + 174, waterY + 55, "#0E7490", 2));
+  elements.push(line("monomer droplet label leader", x + 62, y + height - 39, x + 68, waterY + 219, "#78350F", 2));
+  elements.push(line("seed latex label leader 1", x + 160, y + height - 32, x + 132, waterY + 248, "#1E3A8A", 2));
+  elements.push(line("seed latex label leader 2", x + 230, y + height - 32, x + 224, waterY + 252, "#1E3A8A", 2));
+  elements.push(text("surfactant micelles label", x + 154, waterY + 8, "surfactant micelles", 14, "#0E7490"));
+  elements.push(text("monomer droplet label", x + 42, y + height - 34, "monomer droplets", 14, "#78350F"));
+  elements.push(text("seed latex label", x + 98, y + height - 15, "seed latex particles", 14, "#1E3A8A"));
+  return elements;
+}
+
+function coreGrowthStage(x: number, y: number, width: number, height: number): SceneElement[] {
+  const cy = y + height * 0.52;
+  const cx = x + width * 0.5;
+  return [
+    ellipse("growing core particle outer water boundary", cx - 112, cy - 112, 224, 224, "#D1FAE5", "#047857", 4, 72),
+    ellipse("polymer core growing particle", cx - 74, cy - 74, 148, 148, "#2563EB", "#1E3A8A", 5, 92),
+    path("core polymer chain 1", [
+      { x: cx - 48, y: cy - 8, rightX: cx - 18, rightY: cy - 54, pointType: "smooth" },
+      { x: cx + 28, y: cy - 4, leftX: cx - 4, leftY: cy + 42, rightX: cx + 60, rightY: cy - 46, pointType: "smooth" }
+    ], null, "#FFFFFF", 5, false),
+    path("core polymer chain 2", [
+      { x: cx - 42, y: cy + 34, rightX: cx - 8, rightY: cy - 8, pointType: "smooth" },
+      { x: cx + 48, y: cy + 28, leftX: cx + 4, leftY: cy + 74, pointType: "smooth" }
+    ], null, "#DBEAFE", 4, false),
+    text("core growth label", x + 34, y + height - 50, "radicals + monomer diffuse into seed", 14, "#065F46"),
+    ...surfactantCorona("core particle surfactant", cx, cy, 124, 14, "#0E7490"),
+    ...nodeRow("monomer entering core", x + 34, y + 92, 5, 44, "#FDE68A", "#92400E"),
+    ...arrow("monomer into core arrow", x + 130, y + 112, cx - 74, cy - 16, "#92400E"),
+    ...arrow("radical into core arrow", x + width - 70, y + 94, cx + 62, cy - 44, "#991B1B"),
+    ellipse("core radical marker", x + width - 86, y + 78, 30, 30, "#FCA5A5", "#991B1B", 3),
+    text("core radical label", x + width - 82, y + 72, "I*", 14, "#991B1B")
+  ];
+}
+
+function shellFeedStage(x: number, y: number, width: number, height: number): SceneElement[] {
+  const cx = x + width * 0.5;
+  const cy = y + height * 0.62;
+  return [
+    rect("shell monomer feed reservoir", x + 48, y + 64, width - 96, 42, "#FFF7ED", "#9A3412", 3),
+    text("shell monomer feed label", x + 68, y + 91, "shell monomer feed", 14, "#9A3412"),
+    ...nodeRow("shell feed monomer", x + 212, y + 74, 2, 28, "#FDBA74", "#9A3412"),
+    ...arrow("semi batch feed arrow", x + width * 0.55, y + 112, cx + 34, cy - 94, "#9A3412"),
+    ellipse("forming shell layer", cx - 104, cy - 104, 208, 208, "#FDBA74", "#9A3412", 8, 82),
+    ellipse("seed core before shell", cx - 68, cy - 68, 136, 136, "#2563EB", "#1E3A8A", 5, 92),
+    ...surfactantCorona("shell surface surfactant", cx, cy, 116, 14, "#0E7490"),
+    text("shell growth label", x + 42, y + height - 24, "shell polymerizes at particle surface", 14, "#7C2D12")
+  ];
+}
+
+function finalCoreShellParticle(x: number, y: number, width: number, height: number): SceneElement[] {
+  const cx = x + width / 2;
+  const cy = y + height * 0.5;
+  const shellDiameter = Math.min(width - 18, 255);
+  const coreDiameter = shellDiameter * 0.56;
+  return [
+    text("final particle title", x + 4, y + 31, "Final latex particle", 16, "#0F172A"),
+    rect("final particle panel", x - 12, y + 48, width + 24, height - 48, "#FFF7ED", "#0F172A", 3, 54),
+    ellipse("final core shell particle shell", cx - shellDiameter / 2, cy - shellDiameter / 2, shellDiameter, shellDiameter, "#FDBA74", "#9A3412", 6, 82),
+    ellipse("final core shell particle core", cx - coreDiameter / 2, cy - coreDiameter / 2, coreDiameter, coreDiameter, "#2563EB", "#1E3A8A", 5, 95),
+    path("final core polymer chain", [
+      { x: cx - 46, y: cy - 12, rightX: cx - 16, rightY: cy - 62, pointType: "smooth" },
+      { x: cx + 44, y: cy - 8, leftX: cx - 2, leftY: cy + 52, pointType: "smooth" }
+    ], null, "#FFFFFF", 5, false),
+    ...surfactantCorona("final particle surfactant corona", cx, cy, shellDiameter / 2 + 14, 18, "#0E7490"),
+    line("shell callout line", cx + shellDiameter * 0.34, cy - shellDiameter * 0.3, cx + shellDiameter * 0.23, cy - shellDiameter * 0.36, "#9A3412", 3),
+    text("shell callout label", cx + shellDiameter * 0.1, cy - shellDiameter * 0.39, "shell", 14, "#9A3412"),
+    line("core callout line", cx - coreDiameter * 0.5, cy + 4, x + 58, cy - 4, "#1E3A8A", 3),
+    text("core callout label", x + 22, cy - 10, "core", 14, "#1E3A8A"),
+    text("latex stability label", x + 26, y + height - 38, "surfactant-stabilized dispersion", 14, "#0E7490")
+  ];
+}
+
+function processControlsBand(x: number, y: number, width: number): SceneElement[] {
+  const controls = [
+    ["seed count controls final particle number", "#DBEAFE", "#1E40AF"],
+    ["feed rate affects shell uniformity", "#FED7AA", "#9A3412"],
+    ["surfactant prevents coagulation", "#CCFBF1", "#0F766E"],
+    ["radical flux limits secondary nucleation", "#FEE2E2", "#991B1B"]
+  ] as const;
+
+  const cardWidth = Math.floor((width - 54) / controls.length);
+  return [
+    text("process controls heading", x, y - 18, "Process controls to preserve core-shell morphology", 16, "#0F172A"),
+    ...controls.flatMap(([label, fill, stroke], index) => {
+      const cardX = x + index * (cardWidth + 18);
+      return [
+        rect(`process control card ${index + 1}`, cardX, y, cardWidth, 74, fill, stroke, 2, 76),
+        text(`process control label ${index + 1}`, cardX + 14, y + 31, label, 14, stroke)
+      ];
+    })
+  ];
+}
+
+function legendBand(x: number, y: number, width: number): SceneElement[] {
+  return [
+    rect("legend band", x, y, width, 84, "#FFFFFF", "#334155", 2, 96),
+    text("legend title", x + 18, y + 30, "Legend", 16, "#0F172A"),
+    ellipse("legend core swatch", x + 104, y + 19, 24, 24, "#2563EB", "#1E3A8A", 2),
+    text("legend core text", x + 136, y + 38, "core polymer", 14, "#1E3A8A"),
+    ellipse("legend shell swatch", x + 258, y + 19, 24, 24, "#FDBA74", "#9A3412", 2),
+    text("legend shell text", x + 290, y + 38, "shell polymer", 14, "#9A3412"),
+    ellipse("legend monomer swatch", x + 426, y + 19, 24, 24, "#FDE68A", "#92400E", 2),
+    text("legend monomer text", x + 458, y + 38, "monomer", 14, "#78350F"),
+    ellipse("legend radical swatch", x + 566, y + 19, 24, 24, "#FCA5A5", "#991B1B", 2),
+    text("legend radical text", x + 598, y + 38, "initiator radical", 14, "#991B1B"),
+    line("legend surfactant tail", x + 748, y + 31, x + 770, y + 45, "#0E7490", 2),
+    ellipse("legend surfactant head", x + 738, y + 22, 16, 16, "#67E8F9", "#0E7490", 2),
+    text("legend surfactant text", x + 782, y + 38, "surfactant", 14, "#0E7490")
+  ];
+}
+
+function surfactantMicelle(name: string, cx: number, cy: number, radius: number): SceneElement[] {
+  const coreRadius = radius * 0.48;
+  return [
+    ellipse(`${name} monomer core`, cx - coreRadius, cy - coreRadius, coreRadius * 2, coreRadius * 2, "#FDE68A", "#92400E", 2, 78),
+    ...surfactantCorona(name, cx, cy, radius, 8, "#0E7490")
+  ];
+}
+
+function surfactantCorona(name: string, cx: number, cy: number, radius: number, count: number, stroke: string): SceneElement[] {
+  const elements: SceneElement[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const angle = (-Math.PI / 2) + (index * 2 * Math.PI) / count;
+    const headX = cx + Math.cos(angle) * radius;
+    const headY = cy + Math.sin(angle) * radius;
+    const tailX = cx + Math.cos(angle) * (radius - 18);
+    const tailY = cy + Math.sin(angle) * (radius - 18);
+    elements.push(line(`${name} tail ${index + 1}`, headX, headY, tailX, tailY, stroke, 2));
+    elements.push(ellipse(`${name} head ${index + 1}`, headX - 5, headY - 5, 10, 10, "#67E8F9", stroke, 2));
+  }
+
+  return elements;
 }
 
 function contextMechanismOutcomeFrame(width: number, height: number): SceneElement[] {
@@ -488,9 +705,26 @@ function evidenceSummary(evidence: SemanticSearchResult[]): string {
 }
 
 function titleFromPrompt(prompt: string): string {
-  const cleaned = prompt.replace(/[^a-z0-9 -]+/gi, " ").trim().replace(/\s+/g, " ");
+  const cleaned = baseScientificPrompt(prompt)
+    .replace(/[^a-z0-9 -]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ");
   const title = cleaned.length > 0 ? cleaned : "Scientific concept scene";
-  return title.length > 88 ? `${title.slice(0, 85)}...` : title;
+  return title.length > 60 ? `${title.slice(0, 57)}...` : title;
+}
+
+function baseScientificPrompt(prompt: string): string {
+  let current = prompt.trim();
+  for (let depth = 0; depth < 6; depth += 1) {
+    const firstLine = current.split(/\r?\n/, 1)[0]?.trim() ?? "";
+    const match = firstLine.match(/^Revise the Illustrator artwork for:\s*(.+)$/i);
+    if (!match) {
+      return firstLine || current;
+    }
+    current = match[1].trim();
+  }
+
+  return current;
 }
 
 function uniqueStrings(values: string[]): string[] {

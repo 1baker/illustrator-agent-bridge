@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "kind": "story",
+  "content": {
+    "schemaVersion": 1,
+    "document": {
+      "title": "Software-generated receptor signaling figure",
+      "subtitle": "Meaning becomes layout, vector symbols, connections, labels, SVG, and PNG without Adobe software",
+      "width": 1200,
+      "height": 720
+    },
+    "entities": [
+      { "id": "ligand", "type": "molecule", "label": "Ligand" },
+      { "id": "receptor", "type": "receptor", "label": "Membrane receptor", "emphasis": "secondary" },
+      { "id": "kinase", "type": "protein", "label": "Kinase", "emphasis": "secondary" },
+      { "id": "response", "type": "process", "label": "Gene response" }
+    ],
+    "interactions": [
+      { "id": "binding", "sourceId": "ligand", "type": "binds_to", "targetId": "receptor", "label": "binds" },
+      { "id": "activation", "sourceId": "receptor", "type": "activates", "targetId": "kinase", "label": "activates" },
+      { "id": "induction", "sourceId": "kinase", "type": "activates", "targetId": "response", "label": "induces" }
+    ],
+    "presentation": { "direction": "left_to_right", "spacing": "normal" }
+  },
+  "output": { "png": { "background": "#FFFFFF" } }
+}

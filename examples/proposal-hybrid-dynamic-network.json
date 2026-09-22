@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "ProposalHybridHeroPlan.v1",
+  "profile": "proposal",
+  "widthMm": 171.5,
+  "seed": 429,
+  "title": "From a coupled formulation library to a tested design map",
+  "subtitle": "Measure material state, select kinetic and connectivity contrasts, then test held-out predictions.",
+  "mechanism": {"mode": "formulation", "kicker": "01  BUILD", "title": "Factorial library", "caption": ["TBD loading ×", "stoichiometry ×", "BDGE spacer", "= 27 formulations"], "siteLabel": "formulation factors"},
+  "material": {"mode": "network_library", "kicker": "02  MEASURE MATERIAL STATE", "upperLabel": "relaxation τR", "lowerLabel": "network connectivity", "variantLabels": ["RELAXATION", "ELASTIC", "CONNECTIVITY"]},
+  "response": {"kicker": "03  TEST CONTRASTS", "title": "Measure outcomes", "axisX": "time", "axisY": "stress", "items": ["creep  •  fracture", "interface recovery", "reprocessability"]},
+  "decision": {"kicker": "04  TEST THE MAP", "title": "Does the model explain data?", "question": "MATCH?", "dataLabel": "HELD-OUT", "modelLabel": "FROZEN MODEL", "noLabel": "NO: REVISE", "yesLabel": "YES", "outputLabel": "TRANSFER RULE"},
+  "controls": ["Uncatalyzed reference", "Virgin • heated • cut/pressed", "Matched thermal history", "Predefined held-out cells"],
+  "footer": "Prospective schematic — contrasts are selected from measured state, not assumed from recipe.",
+  "caption": "A 27-formulation library exposes coupled recipe effects. Measured relaxation, elastic state, and connectivity identify kinetic and topology contrasts before property outcomes are examined; a design map advances only after held-out prediction.",
+  "altText": "Four-stage proposal schematic. A factorial polymer library is mapped into measured material coordinates, selected contrasts are tested, and only agreement with held-out formulations yields a transferable design map.",
+  "sourceRefs": ["ProposalWriter/exports/nsf-three-rewrite-20260907/sources/CAN/CAN-narrative-v02.md"],
+  "palette": {"teal": "#147B7E", "deep": "#173B4D", "orange": "#B95322", "muted": "#566D79", "paper": "#F7FAFA", "line": "#B9D0D3"}
+}

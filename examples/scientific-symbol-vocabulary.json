@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "title": "Expanded scientific symbol vocabulary",
+    "subtitle": "Six domain symbols composed from lines, open paths, closed outlines, and filled regions",
+    "width": 1800,
+    "height": 920
+  },
+  "entities": [
+    { "id": "dna_template", "type": "dna", "kind": "double_stranded_dna", "label": "DNA template" },
+    { "id": "rna_transcript", "type": "rna", "kind": "messenger_rna", "label": "RNA transcript" },
+    { "id": "membrane", "type": "membrane", "kind": "lipid_bilayer", "label": "lipid membrane" },
+    { "id": "organelle", "type": "organelle", "kind": "mitochondrial_organelle", "label": "organelle" },
+    { "id": "particle", "type": "particle", "kind": "functional_nanoparticle", "label": "nanoparticle" },
+    { "id": "apparatus", "type": "apparatus", "kind": "laboratory_flask", "label": "reaction flask" }
+  ],
+  "interactions": [
+    { "id": "transcription", "sourceId": "dna_template", "type": "converts_to", "targetId": "rna_transcript", "label": "transcribes" },
+    { "id": "rna_transport", "sourceId": "rna_transcript", "type": "transports_to", "targetId": "organelle", "label": "targets" },
+    { "id": "synthesis", "sourceId": "apparatus", "type": "converts_to", "targetId": "particle", "label": "produces" },
+    { "id": "surface_binding", "sourceId": "particle", "type": "associates_with", "targetId": "membrane", "label": "associates" },
+    { "id": "membrane_transport", "sourceId": "membrane", "type": "transports_to", "targetId": "organelle", "label": "delivers" }
+  ],
+  "presentation": {
+    "direction": "left_to_right",
+    "spacing": "normal"
+  }
+}

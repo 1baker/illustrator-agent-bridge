@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, resolve } from "node:path";
 import { startAgentMcpStdioServer } from "./agent/mcpServer.js";
 import { getGeneratedJobPaths } from "./bridge/files.js";
 import { runJsxViaIllustratorCom } from "./bridge/comAutomation.js";
@@ -7,7 +10,11 @@ import { detectIllustratorApps, probeIllustratorCommunication, type IllustratorP
 import { createGeneratedJob } from "./bridge/jobs.js";
 import { generatedJobSummary } from "./bridge/jsxGenerator.js";
 import { LaunchJobError, launchJsxJob, resolveLaunchPlatform, type LaunchPlatform } from "./bridge/launcher.js";
-import { driveIllustratorMouse, type IllustratorMouseAction, type IllustratorMouseButton } from "./bridge/mouseAutomation.js";
+import { driveIllustratorMouse, drivePhotoshopMouse, type IllustratorMouseAction, type IllustratorMouseButton } from "./bridge/mouseAutomation.js";
+import { runJsxViaPhotoshopCom } from "./bridge/photoshopComAutomation.js";
+import { createGeneratedPhotoshopJob } from "./bridge/photoshopJobs.js";
+import { generatedPhotoshopJobSummary } from "./bridge/photoshopJsxGenerator.js";
+import { detectPhotoshopDesktop } from "./bridge/photoshopProbe.js";
 import { JobResultError, normalizeJobId, readJobStatus, waitForJobResult } from "./bridge/results.js";
 import { startBridgeServer } from "./bridge/server.js";
 import { normalizeCommand, normalizeScene, ValidationError } from "./bridge/validation.js";
@@ -15,10 +22,20 @@ import { callIllustratorTool, getIllustratorMcpConfig, listIllustratorTools, Mcp
 import { OpenAiPlannerError } from "./planner/openAiCartoonPlanner.js";
 import { ObjectShapePlannerError, parseObjectShapeTarget, planObjectShapeScene } from "./planner/objectShapePlanner.js";
 import { planCartoonSceneWithMode, type PlannerMode } from "./planner/plannerRouter.js";
+import { StdioScientificBriefPlanner, type StdioScientificBriefPlannerOptions } from "./planner/stdioScientificBriefPlanner.js";
 import { ExportQaError, inspectExportArtifact } from "./qa/exportQa.js";
 import { reviewArtworkQuality } from "./qa/artworkReviewGuard.js";
 import { guardObjectShapeScene } from "./qa/objectShapeGuard.js";
+import { createAuraCallExternalArtworkReviewRunner, detectAuraCallChatGptBrowser } from "./qa/auracallExternalArtworkJudge.js";
 import { loadDefaultCorpus, searchCorpus } from "./semantic/search.js";
+import {
+  executeAdobeSvgProofWorkflow,
+  prepareAdobeSvgProofWorkflow,
+  type AdobeArtworkIntent,
+  type AdobeSvgProofRunMode
+} from "./workflow/adobeSvgProofWorkflow.js";
+import { executeAdobeProjectWorkflow, prepareAdobeProjectWorkflow } from "./workflow/adobeProjectWorkflow.js";
+import { preflightAdobeProjectWorkflow } from "./workflow/adobeProjectPreflight.js";
 import { executeCartoonWorkflow } from "./workflow/cartoonExecutor.js";
 import { executeObjectShapeWorkflow, type ObjectWorkflowRunMode } from "./workflow/objectExecutor.js";
 import { prepareCartoonWorkflow } from "./workflow/cartoonWorkflow.js";
@@ -26,6 +43,43 @@ import { prepareObjectShapeWorkflow } from "./workflow/objectWorkflow.js";
 import { planScientificConceptScene } from "./planner/scientificConceptPlanner.js";
 import type { SemanticKind } from "./semantic/types.js";
 import { inspectVectorShapeFiles, mergeShapeCombinationItems } from "./semantic/vectorShapeIngest.js";
+import { renderSceneToSvg } from "./render/svgRenderer.js";
+import { renderSceneToTikz } from "./render/tikzRenderer.js";
+import { renderScientificPlotToPgfplots } from "./render/pgfplotsRenderer.js";
+import { compileLatexWithTectonic } from "./render/latexCompiler.js";
+import { renderSceneToPng, type PngRenderOptions } from "./render/pngRenderer.js";
+import { composeRasterLayersToPng } from "./render/rasterCompositor.js";
+import { composeScientificDiagram } from "./scientific/diagramComposer.js";
+import { composeTransformBasicsScene } from "./scientific/transformBasics.js";
+import { composeCompositionBasicsScene } from "./scientific/compositionBasics.js";
+import { composeConstraintBasicsScene } from "./scientific/constraintBasics.js";
+import { composeRoutingBasicsScene } from "./scientific/routingBasics.js";
+import { composeLabelStyleBasicsScene } from "./scientific/labelStyleBasics.js";
+import { compileScientificFigure } from "./scientific/figureCompiler.js";
+import { planScientificStory } from "./scientific/storyPlanner.js";
+import { parseScientificText } from "./scientific/textStoryParser.js";
+import { constructPolygonBoolean } from "./core/polygonBoolean.js";
+import { flattenBezierPath } from "./core/bezierFlattening.js";
+import { expandStroke } from "./core/strokeExpansion.js";
+import { placePathMarkers } from "./core/pathMarkers.js";
+import { compileScientificPlot } from "./core/scientificPlot.js";
+import { composeBooleanGeometryBasicsScene } from "./scientific/booleanGeometryBasics.js";
+import { composeCurveGeometryBasicsScene } from "./scientific/curveGeometryBasics.js";
+import { composeStrokeExpansionBasicsScene } from "./scientific/strokeExpansionBasics.js";
+import { composePathMarkerBasicsScene } from "./scientific/pathMarkerBasics.js";
+import { composeVectorPaintBasicsScene } from "./scientific/vectorPaintBasics.js";
+import { generateScientificImage } from "./scientific/imageGenerator.js";
+import { generateScientificFigureProject } from "./scientific/figureProjectGenerator.js";
+import { approveScientificFigureBrief, approveScientificFigureFinal, normalizeScientificFigureProject, semanticFigureDigest, type ScientificFigureFinalApprovalEvidence } from "./scientific/figureProject.js";
+import { planScientificPromptFigure } from "./scientific/promptFigureWorkflow.js";
+import {writeProposalConceptFigure} from './scientific/proposalConceptArtifacts.js';
+import { approveCandidateBLifelikeRefinement, approveShapeBuiltDirection, generateShapeBuiltScientificObjectBenchmark, optimizeCandidateBLifelikeRefinement, optimizeShapeBuiltScientificObject, shapeBuiltLifelikeProgramDigest, shapeBuiltProgramDigest } from "./scientific/shapeBuiltObjectBenchmark.js";
+import { promotePublicationFigure, rebuildPublicationFigureRegistry, searchPublicationFigureRegistry, type RegistryPromotionInput } from "./registry/publicationFigureRegistry.js";
+import {
+  generateProposalVisualPackage,
+  type ProposalAdobeMode,
+  type ProposalVisualAsset
+} from "./proposal/proposalVisualWorkflow.js";
 
 async function main(argv: string[]): Promise<void> {
   const [command, ...rest] = argv;
@@ -46,8 +100,134 @@ async function main(argv: string[]): Promise<void> {
     case "jsx:cartoon":
       await makeCartoon(rest);
       return;
+    case "render:svg":
+      await renderSvg(rest);
+      return;
+    case "render:tikz":
+      await renderTikz(rest);
+      return;
+    case "render:png":
+      await renderPng(rest);
+      return;
+    case "render:composite":
+      await renderRasterComposite(rest);
+      return;
+    case "scientific:compose":
+      await composeScientific(rest);
+      return;
+    case "scientific:generate":
+      await generateScientificFigure(rest);
+      return;
+    case "scientific:story":
+      await generateScientificStory(rest);
+      return;
+    case "scientific:text":
+      await generateScientificText(rest);
+      return;
+    case "scientific:plot":
+      await generateScientificPlot(rest);
+      return;
+    case "scientific:pgfplots":
+      await generateScientificPgfplots(rest);
+      return;
+    case "scientific:image":
+      await generateUnifiedScientificImage(rest);
+      return;
+    case "scientific:project":
+      await generateFigureProject(rest);
+      return;
+    case "scientific:project-digest":
+      await digestFigureProject(rest);
+      return;
+    case "scientific:prompt-plan":
+      await planPromptFigure(rest);
+      return;
+    case 'scientific:proposal-concept': {
+      const options=parseOptions(rest),source=options.positionals[0],output=optionValue(options,'output-dir');
+      if(!source||options.positionals.length!==1||!output)throw new ValidationError('Requires plan.json --output-dir FRESH_DIR [--pdf]');
+      console.log(JSON.stringify(await writeProposalConceptFigure(await readJsonFile(source),resolve(output),flagValue(options,'pdf')),null,2));
+      return;
+    }
+    case "scientific:shape-benchmark":
+      await generateShapeBenchmark(rest);
+      return;
+    case "scientific:shape-loop":
+      await runShapeOptimizationLoop(rest);
+      return;
+    case "scientific:lifelike-loop":
+      await runLifelikeShapeOptimizationLoop(rest);
+      return;
+    case "scientific:approve-brief":
+      await approveFigureBrief(rest);
+      return;
+    case "scientific:approve-final":
+      await approveFigureFinal(rest);
+      return;
+    case "scientific:registry-search":
+      await searchFigureRegistry(rest);
+      return;
+    case "scientific:registry-rebuild":
+      await rebuildFigureRegistry(rest);
+      return;
+    case "scientific:registry-promote":
+      await promoteFigureRegistry(rest);
+      return;
+    case "proposal:visuals":
+      await generateProposalVisuals(rest);
+      return;
+    case "geometry:transform-basics":
+      await renderTransformBasics(rest);
+      return;
+    case "geometry:composition-basics":
+      await renderCompositionBasics(rest);
+      return;
+    case "geometry:constraint-basics":
+      await renderConstraintBasics(rest);
+      return;
+    case "geometry:routing-basics":
+      await renderRoutingBasics(rest);
+      return;
+    case "geometry:label-style-basics":
+      await renderLabelStyleBasics(rest);
+      return;
+    case "geometry:boolean":
+      await constructBooleanGeometry(rest);
+      return;
+    case "geometry:flatten-curve":
+      await flattenCurveGeometry(rest);
+      return;
+    case "geometry:expand-stroke":
+      await expandStrokeGeometry(rest);
+      return;
+    case "geometry:path-markers":
+      await placePathMarkerGeometry(rest);
+      return;
+    case "geometry:boolean-basics":
+      await renderBooleanGeometryBasics(rest);
+      return;
+    case "geometry:curve-basics":
+      await renderCurveGeometryBasics(rest);
+      return;
+    case "geometry:stroke-expansion-basics":
+      await renderStrokeExpansionBasics(rest);
+      return;
+    case "geometry:path-marker-basics":
+      await renderPathMarkerBasics(rest);
+      return;
+    case "render:paint-basics":
+      await renderVectorPaintBasics(rest);
+      return;
     case "jsx:export":
       await makeExport(rest);
+      return;
+    case "photoshop:proof-svg":
+      await makePhotoshopSvgProof(rest);
+      return;
+    case "photoshop:detect":
+      await photoshopDetect(rest);
+      return;
+    case "chatgpt:detect":
+      await chatGptDetect(rest);
       return;
     case "illustrator:detect":
       await illustratorDetect(rest);
@@ -57,6 +237,9 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "illustrator:mouse":
       await illustratorMouse(rest);
+      return;
+    case "photoshop:mouse":
+      await photoshopMouse(rest);
       return;
     case "plan:cartoon":
       await planCartoon(rest);
@@ -76,6 +259,21 @@ async function main(argv: string[]): Promise<void> {
     case "workflow:execute-cartoon":
       await workflowExecuteCartoon(rest);
       return;
+    case "workflow:adobe-svg-proof":
+      await workflowAdobeSvgProof(rest);
+      return;
+    case "workflow:execute-adobe-svg-proof":
+      await workflowExecuteAdobeSvgProof(rest);
+      return;
+    case "workflow:adobe-project":
+      await workflowAdobeProject(rest);
+      return;
+    case "workflow:preflight-adobe-project":
+      await workflowPreflightAdobeProject(rest);
+      return;
+    case "workflow:execute-adobe-project":
+      await workflowExecuteAdobeProject(rest);
+      return;
     case "workflow:object":
       await workflowObject(rest);
       return;
@@ -93,6 +291,9 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "job:run-com":
       await jobRunCom(rest);
+      return;
+    case "job:run-photoshop-com":
+      await jobRunPhotoshopCom(rest);
       return;
     case "qa:export":
       await qaExport(rest);
@@ -169,6 +370,920 @@ async function makeCartoon(args: string[]): Promise<void> {
   console.log(JSON.stringify({ ok: true, job: generatedJobSummary(job) }, null, 2));
 }
 
+async function renderSvg(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const scenePath = options.positionals[0] ?? "examples/geometry-basics-scene.json";
+  const outputValue = optionValue(options, "output") ?? "var/exports/geometry-basics.svg";
+  const outputPath = resolve(outputValue);
+  const scene = normalizeScene(await readJsonFile(scenePath));
+  const svg = renderSceneToSvg(scene);
+  const pngOutputValue = optionValue(options, "png-output");
+  const pngOutputPath = pngOutputValue === undefined ? undefined : resolve(pngOutputValue);
+  const renderedPng = pngOutputPath === undefined ? undefined : renderSceneToPng(scene, pngOptions(options, "png-"));
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, svg, "utf8");
+  if (pngOutputPath !== undefined && renderedPng !== undefined) {
+    await mkdir(dirname(pngOutputPath), { recursive: true });
+    await writeFile(pngOutputPath, renderedPng.png);
+  }
+
+  console.log(JSON.stringify({ ok: true, scenePath: resolve(scenePath), outputPath, pngOutputPath, pngBytes: renderedPng?.png.length, elementCount: scene.elements.length }, null, 2));
+}
+
+async function renderTikz(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const scenePath = options.positionals[0] ?? "examples/geometry-basics-scene.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/geometry-basics.tex");
+  const pdfOutputValue = optionValue(options, "pdf-output");
+  const pdfOutputPath = pdfOutputValue === undefined ? undefined : resolve(pdfOutputValue);
+  const rendered = renderSceneToTikz(await readJsonFile(scenePath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, rendered.latex, "utf8");
+  const compiled = pdfOutputPath === undefined ? undefined : await compileLatexWithTectonic(rendered.latex, { enginePath: resolveTectonicPath(options) });
+  if (compiled && pdfOutputPath) {
+    await mkdir(dirname(pdfOutputPath), { recursive: true });
+    await writeFile(pdfOutputPath, compiled.pdf);
+  }
+  console.log(JSON.stringify({ ok: true, scenePath: resolve(scenePath), outputPath, pdfOutputPath, bytes: Buffer.byteLength(rendered.latex), pdfBytes: compiled?.bytes, pdfSha256: compiled?.sha256, renderer: rendered.renderer, requiredPackages: rendered.requiredPackages }, null, 2));
+}
+
+async function renderPng(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const scenePath = options.positionals[0] ?? "examples/geometry-basics-scene.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/geometry-basics.png");
+  const scene = normalizeScene(await readJsonFile(scenePath));
+  const rendered = renderSceneToPng(scene, pngOptions(options));
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, rendered.png);
+
+  console.log(JSON.stringify({
+    ok: true,
+    scenePath: resolve(scenePath),
+    outputPath,
+    sourceWidth: rendered.sourceWidth,
+    sourceHeight: rendered.sourceHeight,
+    width: rendered.width,
+    height: rendered.height,
+    background: rendered.background,
+    fit: rendered.fit,
+    fontPolicy: rendered.fontPolicy,
+    renderer: rendered.renderer,
+    bytes: rendered.png.length,
+    elementCount: scene.elements.length
+  }, null, 2));
+}
+
+async function renderRasterComposite(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const compositionPath = options.positionals[0] ?? "examples/raster-composition-basics.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/raster-composition-basics.png");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/raster-composition-basics.svg");
+  const rendered = composeRasterLayersToPng(await readJsonFile(compositionPath), pngOptions(options));
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(outputPath, rendered.png);
+  await writeFile(svgOutputPath, rendered.compositionSvg, "utf8");
+
+  console.log(JSON.stringify({
+    ok: true,
+    compositionPath: resolve(compositionPath),
+    outputPath,
+    svgOutputPath,
+    width: rendered.width,
+    height: rendered.height,
+    layerCount: rendered.layerCount,
+    visibleLayerCount: rendered.visibleLayerCount,
+    background: rendered.background,
+    renderer: rendered.renderer,
+    bytes: rendered.png.length
+  }, null, 2));
+}
+
+async function constructBooleanGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/polygon-boolean-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/polygon-boolean-result.json");
+  const result = constructPolygonBoolean(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function flattenCurveGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/bezier-flatten-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/bezier-flatten-result.json");
+  const result = flattenBezierPath(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function expandStrokeGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/stroke-expansion-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/stroke-expansion-result.json");
+  const result = expandStroke(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function placePathMarkerGeometry(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/path-marker-request.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/path-marker-result.json");
+  const result = placePathMarkers(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, result }, null, 2));
+}
+
+async function generateScientificPlot(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/scientific-plot.json";
+  const resultOutputPath = resolve(optionValue(options, "result-output") ?? "var/exports/scientific-plot.result.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-plot.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-plot.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/scientific-plot.png");
+  const result = compileScientificPlot(await readJsonFile(requestPath));
+  const svg = renderSceneToSvg(result.scene);
+  const png = renderSceneToPng(result.scene, pngOptions(options, "png-"));
+  for (const path of [resultOutputPath, sceneOutputPath, svgOutputPath, pngOutputPath]) await mkdir(dirname(path), { recursive: true });
+  await writeFile(resultOutputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, `${JSON.stringify(result.scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), resultOutputPath, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, seriesCount: result.seriesSummaries.length, pointCount: result.seriesSummaries.reduce((sum, series) => sum + series.pointCount, 0), engine: result.engine }, null, 2));
+}
+
+async function generateScientificPgfplots(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/scientific-plot.json";
+  const outputPath = resolve(optionValue(options, "output") ?? "var/exports/scientific-plot.tex");
+  const pdfOutputValue = optionValue(options, "pdf-output");
+  const pdfOutputPath = pdfOutputValue === undefined ? undefined : resolve(pdfOutputValue);
+  const rendered = renderScientificPlotToPgfplots(await readJsonFile(requestPath));
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, rendered.latex, "utf8");
+  const compiled = pdfOutputPath === undefined ? undefined : await compileLatexWithTectonic(rendered.latex, { enginePath: resolveTectonicPath(options) });
+  if (compiled && pdfOutputPath) {
+    await mkdir(dirname(pdfOutputPath), { recursive: true });
+    await writeFile(pdfOutputPath, compiled.pdf);
+  }
+  console.log(JSON.stringify({ ok: true, requestPath: resolve(requestPath), outputPath, pdfOutputPath, bytes: Buffer.byteLength(rendered.latex), pdfBytes: compiled?.bytes, pdfSha256: compiled?.sha256, renderer: rendered.renderer, compat: rendered.compat, seriesCount: rendered.plot.seriesSummaries.length }, null, 2));
+}
+
+async function generateUnifiedScientificImage(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = options.positionals[0] ?? "examples/scientific-image-story.json";
+  const manifestOutputPath = resolve(optionValue(options, "manifest-output") ?? "var/exports/scientific-image.manifest.json");
+  const intermediateOutputPath = resolve(optionValue(options, "intermediate-output") ?? "var/exports/scientific-image.intermediate.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-image.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-image.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/scientific-image.png");
+  const latexOutputPath = resolve(optionValue(options, "latex-output") ?? "var/exports/scientific-image.tex");
+  const latexPdfOutputValue = optionValue(options, "latex-pdf-output");
+  const latexPdfOutputPath = latexPdfOutputValue === undefined ? undefined : resolve(latexPdfOutputValue);
+  const generated = generateScientificImage(await readJsonFile(requestPath));
+  const compiledLatex = latexPdfOutputPath === undefined
+    ? undefined
+    : await compileLatexWithTectonic(generated.latex, { enginePath: resolveTectonicPath(options) });
+  for (const path of [manifestOutputPath, intermediateOutputPath, sceneOutputPath, svgOutputPath, pngOutputPath, latexOutputPath, latexPdfOutputPath]) {
+    if (path !== undefined) await mkdir(dirname(path), { recursive: true });
+  }
+  await writeFile(manifestOutputPath, `${JSON.stringify(generated.manifest, null, 2)}\n`, "utf8");
+  await writeFile(intermediateOutputPath, `${JSON.stringify(generated.intermediate, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, generated.sceneJson, "utf8");
+  await writeFile(svgOutputPath, generated.svg, "utf8");
+  await writeFile(latexOutputPath, generated.latex, "utf8");
+  await writeFile(pngOutputPath, generated.png.png);
+  if (compiledLatex && latexPdfOutputPath) await writeFile(latexPdfOutputPath, compiledLatex.pdf);
+  console.log(JSON.stringify({
+    ok: true,
+    requestPath: resolve(requestPath),
+    manifestOutputPath,
+    intermediateOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    latexOutputPath,
+    latexPdfOutputPath,
+    pngOutputPath,
+    latexPdfBytes: compiledLatex?.bytes,
+    latexPdfSha256: compiledLatex?.sha256,
+    ...generated.manifest
+  }, null, 2));
+}
+
+async function generateFigureProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = resolve(options.positionals[0] ?? "examples/scientific-figure-project.json");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/scientific-figure-project");
+  const assetRoot = resolve(optionValue(options, "asset-root") ?? dirname(requestPath));
+  const generated = await generateScientificFigureProject(await readJsonFile(requestPath), { assetRoot, runAnalysis: flagValue(options, "run-analysis") });
+  await mkdir(outputDir, { recursive: true });
+  const base = generated.project.id;
+  const paths = {
+    svg: resolve(outputDir, `${base}.svg`), pdf: resolve(outputDir, `${base}.pdf`), png: resolve(outputDir, `${base}.png`),
+    semanticJson: resolve(outputDir, `${base}.semantic.json`), latex: resolve(outputDir, `${base}.tex`), analysis: resolve(outputDir, `${base}.analysis.json`), manifest: resolve(outputDir, `${base}.manifest.json`), qa: resolve(outputDir, `${base}.qa.json`)
+  };
+  await Promise.all([
+    writeFile(paths.svg, generated.svg, "utf8"), writeFile(paths.pdf, generated.pdf), writeFile(paths.png, generated.png), writeFile(paths.semanticJson, generated.semanticJson, "utf8"),
+    writeFile(paths.latex, generated.latex, "utf8"), writeFile(paths.analysis, generated.analysisJson, "utf8"), writeFile(paths.manifest, generated.manifestJson, "utf8"), writeFile(paths.qa, `${JSON.stringify(generated.qa, null, 2)}\n`, "utf8")
+  ]);
+  console.log(JSON.stringify({ ok: true, requestPath, assetRoot, outputDir, paths, manifest: generated.manifest, qa: generated.qa }, null, 2));
+}
+
+async function digestFigureProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = resolve(options.positionals[0] ?? "examples/golden-manuscript-figure-project.json");
+  const project = normalizeScientificFigureProject(await readJsonFile(requestPath));
+  console.log(JSON.stringify({ ok: true, project, semanticDigest: semanticFigureDigest(project) }, null, 2));
+}
+
+async function planPromptFigure(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const requestPath = resolve(options.positionals[0] ?? "examples/prompt-only-latent-diol-interphase.request.json");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/prompt-figure");
+  const replayPath = optionValue(options, "planner-output");
+  const adapterPath = optionValue(options, "planner-adapter");
+  if (replayPath !== undefined && adapterPath !== undefined) throw new ValidationError("scientific:prompt-plan accepts either --planner-output or --planner-adapter, not both");
+  const replayPlanner = replayPath === undefined ? undefined : { id: "replay-reviewed-semantics.v1", async plan() { return { mode: "openai" as const, brief: await readJsonFile(resolve(replayPath)), notes: ["Replayed a digest-bound provider semantic plan; geometry remains deterministic."] }; } };
+  const adapterPlanner = adapterPath === undefined ? undefined : new StdioScientificBriefPlanner(await readJsonFile(resolve(adapterPath)) as StdioScientificBriefPlannerOptions);
+  const result = await planScientificPromptFigure(await readJsonFile(requestPath), { registryRoot: optionValue(options, "registry"), planner: replayPlanner ?? adapterPlanner });
+  await mkdir(outputDir, { recursive: true });
+  const paths: Record<string, string> = { workflow: resolve(outputDir, `${result.request.id}.workflow.json`) };
+  const workflow = { ...result, preview: result.preview ? { manifest: result.preview.manifest, intermediate: result.preview.intermediate } : undefined };
+  await writeFile(paths.workflow, `${JSON.stringify(workflow, null, 2)}\n`, "utf8");
+  if (result.project && result.preview && result.qa) {
+    const tectonic = optionValue(options, "tectonic-bin"); const compiled = tectonic ? await compileLatexWithTectonic(result.preview.latex, { enginePath: resolve(tectonic) }) : undefined;
+    Object.assign(paths, { project: resolve(outputDir, `${result.request.id}.project.json`), program: resolve(outputDir, `${result.request.id}.figure-program.json`), scene: resolve(outputDir, `${result.request.id}.scene.json`), svg: resolve(outputDir, `${result.request.id}.svg`), tikz: resolve(outputDir, `${result.request.id}.tex`), png: resolve(outputDir, `${result.request.id}.png`), qa: resolve(outputDir, `${result.request.id}.qa.json`), ...(compiled ? { pdf: resolve(outputDir, `${result.request.id}.pdf`) } : {}) });
+    await Promise.all([
+      writeFile(paths.project!, `${JSON.stringify(result.project, null, 2)}\n`, "utf8"), writeFile(paths.program!, `${JSON.stringify(result.preview.intermediate.figureProgram ?? { schemaVersion: "FigureProgram.v1", compiler: "legacy" }, null, 2)}\n`, "utf8"), writeFile(paths.scene!, result.preview.sceneJson, "utf8"), writeFile(paths.svg!, result.preview.svg, "utf8"),
+      writeFile(paths.tikz!, result.preview.latex, "utf8"), writeFile(paths.png!, result.preview.png.png), writeFile(paths.qa!, `${JSON.stringify(result.qa, null, 2)}\n`, "utf8")
+    ]);
+    if (compiled && paths.pdf) await writeFile(paths.pdf, compiled.pdf);
+  }
+  console.log(JSON.stringify({ ok: true, status: result.status, nextGate: result.nextGate, requestDigest: result.requestDigest, semanticDigest: result.semanticDigest, qa: result.qa, paths }, null, 2));
+}
+
+async function generateShapeBenchmark(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/shape-built-scientific-object");
+  const benchmark = generateShapeBuiltScientificObjectBenchmark(optionValue(options, "prompt"));
+  await mkdir(outputDir, { recursive: true });
+  const rendered = benchmark.candidates.map((candidate) => ({
+    candidate,
+    svg: renderSceneToSvg(candidate.scene),
+    png: renderSceneToPng(candidate.scene, { width: 1200 }),
+    tikz: renderSceneToTikz(candidate.scene)
+  }));
+  await Promise.all(rendered.flatMap(({ candidate, svg, png, tikz }) => {
+    const prefix = resolve(outputDir, candidate.program.id);
+    return [
+      writeFile(`${prefix}.scene.json`, `${JSON.stringify(candidate.scene, null, 2)}\n`, "utf8"),
+      writeFile(`${prefix}.svg`, svg, "utf8"),
+      writeFile(`${prefix}.png`, png.png),
+      writeFile(`${prefix}.tex`, tikz.latex, "utf8")
+    ];
+  }));
+  const ledger = {
+    schemaVersion: benchmark.schemaVersion,
+    prompt: benchmark.prompt,
+    targetImageUsed: benchmark.targetImageUsed,
+    objective: benchmark.objective,
+    constructionRules: benchmark.constructionRules,
+    selectedCandidateId: benchmark.selectedCandidateId,
+    approval: benchmark.approval,
+    candidates: benchmark.candidates.map(({ scene, ...candidate }) => ({
+      ...candidate,
+      metrics: {
+        elements: scene.elements.length,
+        objects: scene.semantics?.objects.length ?? 0,
+        relationships: scene.semantics?.relationships?.length ?? 0,
+        paths: scene.elements.filter((element) => element.type === "path").length,
+        polygons: scene.elements.filter((element) => element.type === "polygon").length,
+        ellipses: scene.elements.filter((element) => element.type === "ellipse").length
+      },
+      artifacts: { scene: `${candidate.program.id}.scene.json`, svg: `${candidate.program.id}.svg`, png: `${candidate.program.id}.png`, tikz: `${candidate.program.id}.tex` }
+    }))
+  };
+  const reviewHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shape-built scientific object benchmark</title><style>body{margin:0;background:#edf1f4;color:#172033;font-family:Arial,sans-serif}main{max-width:1440px;margin:auto;padding:34px}h1{font-size:28px;margin:0 0 8px}p{color:#536273;line-height:1.45}.notice{background:#fff8df;border-left:5px solid #d59a24;padding:12px 16px;margin:22px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:24px}.card{background:white;border:1px solid #cbd5df;border-radius:10px;overflow:hidden;box-shadow:0 5px 18px #24334818}.card h2{font-size:17px;margin:0;padding:15px 18px 4px}.meta{font-size:13px;padding:0 18px 13px;color:#667582}.figure{border-top:1px solid #e3e8ed;background:#fcfdfe}.figure svg{display:block;width:100%;height:auto}.selected{outline:3px solid #326d7c}.files{font-size:12px;padding:12px 18px;background:#f7f9fa}</style></head><body><main><h1>Shape-built scientific object benchmark</h1><p>${escapeHtmlForReview(benchmark.prompt)}</p><div class="notice"><strong>Review gate:</strong> no target image was used. The score checks construction and semantic properties; it does not approve visual quality. Please choose a direction or request changes.</div><div class="grid">${rendered.map(({ candidate, svg }) => `<section class="card ${candidate.program.id === benchmark.selectedCandidateId ? "selected" : ""}"><h2>${escapeHtmlForReview(candidate.program.id)}${candidate.program.id === benchmark.selectedCandidateId ? " — software-selected" : ""}</h2><div class="meta">score ${candidate.score.toFixed(1)} · ${candidate.program.colorway} · ${candidate.program.lamellaCount} lamellae · ${candidate.program.amorphousChainCount} amorphous chains · ${candidate.program.tieChainCount} tie chains</div><div class="figure">${svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div><div class="files">Editable sources: SVG · TikZ · semantic scene JSON; PNG is derived.</div></section>`).join("")}</div></main></body></html>`;
+  const ledgerPath = resolve(outputDir, "construction-ledger.json");
+  const reviewPath = resolve(outputDir, "review.html");
+  await Promise.all([writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, "utf8"), writeFile(reviewPath, reviewHtml, "utf8")]);
+  console.log(JSON.stringify({ ok: true, outputDir, reviewPath, ledgerPath, selectedCandidateId: benchmark.selectedCandidateId, approval: benchmark.approval, candidateCount: benchmark.candidates.length }, null, 2));
+}
+
+function escapeHtmlForReview(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+async function runShapeOptimizationLoop(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const candidateId = optionValue(options, "baseline") ?? "candidate-b-ordered";
+  const reviewer = optionValue(options, "reviewer") ?? "user";
+  const reviewedAt = optionValue(options, "approved-at") ?? new Date().toISOString();
+  const generations = Number(optionValue(options, "generations") ?? "3");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/shape-built-candidate-b-loop");
+  const approval = approveShapeBuiltDirection(candidateId, reviewer, reviewedAt);
+  const run = optimizeShapeBuiltScientificObject(approval, generations);
+  await mkdir(outputDir, { recursive: true });
+  const stages = [{ id: "baseline", candidate: run.baseline, mutation: "User-approved direction" }, ...run.steps.map((step) => ({ id: `generation-${step.generation}`, candidate: step.winner, mutation: step.acceptedMutation ?? "No improving mutation" }))];
+  const rendered = stages.map((stage) => ({ ...stage, svg: renderSceneToSvg(stage.candidate.scene), png: renderSceneToPng(stage.candidate.scene, { width: 1200 }), tikz: renderSceneToTikz(stage.candidate.scene) }));
+  await Promise.all(rendered.flatMap((stage) => {
+    const prefix = resolve(outputDir, stage.id);
+    return [
+      writeFile(`${prefix}.scene.json`, `${JSON.stringify(stage.candidate.scene, null, 2)}\n`, "utf8"),
+      writeFile(`${prefix}.svg`, stage.svg, "utf8"),
+      writeFile(`${prefix}.png`, stage.png.png),
+      writeFile(`${prefix}.tex`, stage.tikz.latex, "utf8")
+    ];
+  }));
+  const compactCandidate = (candidate: typeof run.baseline) => ({ program: candidate.program, programDigest: shapeBuiltProgramDigest(candidate.program), score: candidate.score, scoreBreakdown: candidate.scoreBreakdown });
+  const lineage = {
+    schemaVersion: run.schemaVersion,
+    approval: run.approval,
+    objective: run.objective,
+    baseline: compactCandidate(run.baseline),
+    steps: run.steps.map((step) => ({ generation: step.generation, parentProgramDigest: step.parentProgramDigest, acceptedMutation: step.acceptedMutation, winner: compactCandidate(step.winner), evaluated: step.evaluated })),
+    final: compactCandidate(run.final),
+    finalApproval: run.finalApproval
+  };
+  const approvalPath = resolve(outputDir, "direction-approval.json");
+  const lineagePath = resolve(outputDir, "optimization-lineage.json");
+  const reviewPath = resolve(outputDir, "review.html");
+  const reviewHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Candidate B autonomous vector loop</title><style>body{margin:0;background:#edf1f4;color:#172033;font-family:Arial,sans-serif}main{max-width:1380px;margin:auto;padding:34px}h1{margin:0 0 8px}.notice{background:#eef7f5;border-left:5px solid #38776d;padding:12px 16px;margin:22px 0;color:#34534f}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(570px,1fr));gap:24px}.card{background:white;border:1px solid #cbd5df;border-radius:10px;overflow:hidden;box-shadow:0 5px 18px #24334818}.card h2{font-size:17px;margin:0;padding:15px 18px 4px}.meta{font-size:13px;padding:0 18px 13px;color:#667582}.figure svg{display:block;width:100%;height:auto;border-top:1px solid #e3e8ed}.final{outline:3px solid #38776d}</style></head><body><main><h1>Candidate B: autonomous mutable-vector loop</h1><p>Candidate B is locked by SHA-256 as the approved direction. Each generation changed one explicit program property and retained it only when semantic-vector fitness improved.</p><div class="notice"><strong>Final artwork is still pending human review.</strong> The loop can optimize declared constraints; it cannot declare its own aesthetic success.</div><div class="grid">${rendered.map((stage, index) => `<section class="card ${index === rendered.length - 1 ? "final" : ""}"><h2>${escapeHtmlForReview(stage.id)}${index === rendered.length - 1 ? " — current winner" : ""}</h2><div class="meta">${escapeHtmlForReview(stage.mutation)} · score ${stage.candidate.score.toFixed(2)} · program digest ${shapeBuiltProgramDigest(stage.candidate.program).slice(0, 12)}</div><div class="figure">${stage.svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div></section>`).join("")}</div></main></body></html>`;
+  await Promise.all([writeFile(approvalPath, `${JSON.stringify(approval, null, 2)}\n`, "utf8"), writeFile(lineagePath, `${JSON.stringify(lineage, null, 2)}\n`, "utf8"), writeFile(reviewPath, reviewHtml, "utf8")]);
+  console.log(JSON.stringify({ ok: true, outputDir, approvalPath, lineagePath, reviewPath, baselineScore: run.baseline.score, finalScore: run.final.score, acceptedMutations: run.steps.map((step) => step.acceptedMutation), finalApproval: run.finalApproval }, null, 2));
+}
+
+async function runLifelikeShapeOptimizationLoop(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const reviewer = optionValue(options, "reviewer") ?? "user";
+  const reviewedAt = optionValue(options, "approved-at") ?? new Date().toISOString();
+  const generations = Number(optionValue(options, "generations") ?? "7");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/shape-built-candidate-b-lifelike-loop");
+  const approval = approveCandidateBLifelikeRefinement(reviewer, reviewedAt);
+  const run = optimizeCandidateBLifelikeRefinement(approval, generations);
+  await mkdir(outputDir, { recursive: true });
+  const stages = [
+    { id: "baseline-approved-b", candidate: run.baseline, mutation: "Approved Candidate B generation 3" },
+    ...run.steps.map((step) => ({ id: `generation-${step.generation}`, candidate: step.winner, mutation: step.acceptedMutation ?? "No improving mutation" }))
+  ];
+  const rendered = stages.map((stage) => ({ ...stage, svg: renderSceneToSvg(stage.candidate.scene), png: renderSceneToPng(stage.candidate.scene, { width: 1200 }), tikz: renderSceneToTikz(stage.candidate.scene) }));
+  await Promise.all(rendered.flatMap((stage) => {
+    const prefix = resolve(outputDir, stage.id);
+    return [
+      writeFile(`${prefix}.scene.json`, `${JSON.stringify(stage.candidate.scene, null, 2)}\n`, "utf8"),
+      writeFile(`${prefix}.svg`, stage.svg, "utf8"),
+      writeFile(`${prefix}.png`, stage.png.png),
+      writeFile(`${prefix}.tex`, stage.tikz.latex, "utf8")
+    ];
+  }));
+  const compactCandidate = (candidate: typeof run.baseline) => ({ program: candidate.program, programDigest: shapeBuiltLifelikeProgramDigest(candidate.program), score: candidate.score, scoreBreakdown: candidate.scoreBreakdown, visualQuality: candidate.visualQuality });
+  const first = rendered[0]!;
+  const last = rendered.at(-1)!;
+  const primitiveCounts = Object.fromEntries([...new Set(run.final.scene.elements.map((element) => element.type))].sort().map((type) => [type, run.final.scene.elements.filter((element) => element.type === type).length]));
+  const lineage = {
+    schemaVersion: run.schemaVersion,
+    approval: run.approval,
+    referencePolicy: run.referencePolicy,
+    referenceNotes: {
+      reviewedUrl: "https://figurelabs.ai/",
+      reviewedAt,
+      copiedOrTracedAssets: false,
+      generalTraits: ["layered 2.5D volume", "soft occlusion", "restrained highlights", "material face differentiation", "sparse scientific labels"]
+    },
+    objective: run.objective,
+    baseline: compactCandidate(run.baseline),
+    steps: run.steps.map((step) => ({ generation: step.generation, parentProgramDigest: step.parentProgramDigest, acceptedMutation: step.acceptedMutation, winner: compactCandidate(step.winner), evaluated: step.evaluated })),
+    final: {
+      ...compactCandidate(run.final),
+      sceneEvidence: {
+        primitiveCounts,
+        semanticObjectCount: run.final.scene.semantics?.objects.length ?? 0,
+        relationshipCount: run.final.scene.semantics?.relationships?.length ?? 0,
+        semanticVectorCoverage: run.final.visualQuality.metrics.semanticVectorCoverage,
+        relationshipGeometryCoverage: run.final.visualQuality.metrics.relationshipGeometryCoverage,
+        embeddedRasterCount: run.final.visualQuality.metrics.embeddedRasterCount,
+        evaluationDigest: run.final.visualQuality.digest
+      },
+      outputDigests: {
+        sceneSha256: createHash("sha256").update(JSON.stringify(run.final.scene)).digest("hex"),
+        svgSha256: createHash("sha256").update(last.svg).digest("hex"),
+        pngSha256: createHash("sha256").update(last.png.png).digest("hex"),
+        tikzSha256: createHash("sha256").update(last.tikz.latex).digest("hex")
+      }
+    },
+    finalApproval: run.finalApproval
+  };
+  const approvalPath = resolve(outputDir, "lifelike-direction-approval.json");
+  const lineagePath = resolve(outputDir, "lifelike-optimization-lineage.json");
+  const reviewPath = resolve(outputDir, "review.html");
+  const reviewHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lifelike vector refinement</title><style>body{margin:0;background:#e9eef1;color:#172033;font-family:Arial,sans-serif}main{max-width:1500px;margin:auto;padding:34px}h1{margin:0 0 8px}.lead{max-width:1050px;color:#526271;line-height:1.5}.notice{background:#fff7df;border-left:5px solid #c98c20;padding:12px 16px;margin:22px 0}.compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(580px,1fr));gap:26px}.card{background:#fff;border:1px solid #c7d1d9;border-radius:12px;overflow:hidden;box-shadow:0 8px 25px #2433481c}.card h2{font-size:18px;margin:0;padding:17px 20px 5px}.meta{font-size:13px;padding:0 20px 14px;color:#667582}.figure svg{display:block;width:100%;height:auto;border-top:1px solid #e3e8ed}.winner{outline:3px solid #497c73}.lineage{margin-top:28px;background:#fff;padding:20px;border-radius:10px}.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{background:#eaf3f1;border:1px solid #bfd8d2;border-radius:999px;padding:7px 10px;font-size:13px}.evidence{font-family:ui-monospace,monospace;font-size:12px;overflow-wrap:anywhere;color:#43535f}</style></head><body><main><h1>Candidate B: scene-measured mutable-vector refinement</h1><p class="lead">The approved software-native object was refined using only explicit paths, polygons, gradients, clipping, opacity, and z-order. Fitness is measured from the rendered scene structure—not proximity to hidden parameter targets. Public examples informed general quality traits only; no image was copied, traced, or used as a pixel target.</p><div class="notice"><strong>Human gate remains open:</strong> autonomous QA rejects structural failures, but it cannot declare its own aesthetic success.</div><div class="compare"><section class="card"><h2>Exact approved baseline</h2><div class="meta">score ${first.candidate.score.toFixed(2)} · visual QA ${first.candidate.visualQuality.score.toFixed(2)} · digest ${shapeBuiltLifelikeProgramDigest(first.candidate.program).slice(0, 12)}</div><div class="figure">${first.svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div></section><section class="card winner"><h2>Current scene-measured winner</h2><div class="meta">score ${last.candidate.score.toFixed(2)} · visual QA ${last.candidate.visualQuality.score.toFixed(2)} · hard failures ${last.candidate.visualQuality.hardFailures.length} · digest ${shapeBuiltLifelikeProgramDigest(last.candidate.program).slice(0, 12)}</div><div class="figure">${last.svg.replace(/^<\?xml[^>]*>\s*/i, "")}</div></section></div><section class="lineage"><h2>Accepted bounded changes</h2><div class="chips">${run.steps.map((step) => `<span class="chip">G${step.generation}: ${escapeHtmlForReview(step.acceptedMutation ?? "no change")} · parent ${step.parentProgramDigest.slice(0, 8)}</span>`).join("")}</div><p class="evidence">Approval preimage ${run.approval.approvedBaseline.preimageDigest} · evaluation ${run.final.visualQuality.digest} · policy ${run.final.visualQuality.policyVersion}</p></section></main></body></html>`;
+  await Promise.all([writeFile(approvalPath, `${JSON.stringify(approval, null, 2)}\n`, "utf8"), writeFile(lineagePath, `${JSON.stringify(lineage, null, 2)}\n`, "utf8"), writeFile(reviewPath, reviewHtml, "utf8")]);
+  console.log(JSON.stringify({ ok: true, outputDir, approvalPath, lineagePath, reviewPath, baselineScore: run.baseline.score, finalScore: run.final.score, acceptedMutations: run.steps.map((step) => step.acceptedMutation), finalProgramDigest: shapeBuiltLifelikeProgramDigest(run.final.program), finalApproval: run.finalApproval }, null, 2));
+}
+
+async function approveFigureBrief(args: string[]): Promise<void> {
+  const options = parseOptions(args); const projectPath = options.positionals[0]; const reviewer = optionValue(options, "reviewer"), reviewedAt = optionValue(options, "reviewed-at"), output = optionValue(options, "output");
+  if (!projectPath || !reviewer || !reviewedAt || !output) throw new ValidationError("scientific:approve-brief requires PROJECT_JSON_PATH, --reviewer, --reviewed-at, and --output");
+  const project = approveScientificFigureBrief(await readJsonFile(resolve(projectPath)), reviewer, reviewedAt); const outputPath = resolve(output); await mkdir(dirname(outputPath), { recursive: true }); await writeFile(outputPath, `${JSON.stringify(project, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, lifecycle: project.lifecycle, briefDigest: project.approvals.brief?.digest, outputPath }, null, 2));
+}
+
+async function approveFigureFinal(args: string[]): Promise<void> {
+  const options = parseOptions(args); const projectPath = options.positionals[0], evidencePath = optionValue(options, "evidence"), reviewer = optionValue(options, "reviewer"), reviewedAt = optionValue(options, "reviewed-at"), output = optionValue(options, "output");
+  if (!projectPath || !evidencePath || !reviewer || !reviewedAt || !output) throw new ValidationError("scientific:approve-final requires PROJECT_JSON_PATH, --evidence, --reviewer, --reviewed-at, and --output");
+  const project = approveScientificFigureFinal(await readJsonFile(resolve(projectPath)), await readJsonFile(resolve(evidencePath)) as ScientificFigureFinalApprovalEvidence, reviewer, reviewedAt); const outputPath = resolve(output); await mkdir(dirname(outputPath), { recursive: true }); await writeFile(outputPath, `${JSON.stringify(project, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, lifecycle: project.lifecycle, finalDigest: project.approvals.final?.digest, outputPath }, null, 2));
+}
+
+async function searchFigureRegistry(args: string[]): Promise<void> {
+  const options = parseOptions(args); const queryPath = options.positionals[0];
+  if (!queryPath) throw new ValidationError("scientific:registry-search requires a query JSON path");
+  const root = resolve(optionValue(options, "registry") ?? "var/publication-figure-registry/v1");
+  console.log(JSON.stringify({ ok: true, root, ...(await searchPublicationFigureRegistry(root, await readJsonFile(queryPath) as Parameters<typeof searchPublicationFigureRegistry>[1])) }, null, 2));
+}
+
+async function rebuildFigureRegistry(args: string[]): Promise<void> {
+  const options = parseOptions(args); const root = resolve(optionValue(options, "registry") ?? "var/publication-figure-registry/v1");
+  console.log(JSON.stringify({ ok: true, root, ...(await rebuildPublicationFigureRegistry(root)) }, null, 2));
+}
+
+async function promoteFigureRegistry(args: string[]): Promise<void> {
+  const options = parseOptions(args); const bundlePath = options.positionals[0];
+  if (!bundlePath) throw new ValidationError("scientific:registry-promote requires a promotion bundle JSON path");
+  const absoluteBundle = resolve(bundlePath), bundleDir = dirname(absoluteBundle), bundle = await readJsonFile(absoluteBundle) as Record<string, unknown>;
+  const file = async (name: string, binary = false): Promise<string | Buffer> => { const value = bundle[name]; if (typeof value !== "string" || !value.trim()) throw new ValidationError(`promotion bundle.${name} must be a file path`); const path = resolve(bundleDir, value); return binary ? readFile(path) : readFile(path, "utf8"); };
+  const input: RegistryPromotionInput = {
+    id: String(bundle.id ?? ""), project: JSON.parse(String(await file("projectPath"))), finalEvidence: bundle.finalEvidence as RegistryPromotionInput["finalEvidence"],
+    scene: JSON.parse(String(await file("scenePath"))), tikz: String(await file("tikzPath")), svg: String(await file("svgPath")), png: await file("pngPath", true) as Buffer,
+    manifest: JSON.parse(String(await file("manifestPath"))), analysis: JSON.parse(String(await file("analysisPath"))), qa: JSON.parse(String(await file("qaPath"))), intent: bundle.intent as RegistryPromotionInput["intent"], promotion: bundle.promotion as RegistryPromotionInput["promotion"]
+  };
+  const root = resolve(optionValue(options, "registry") ?? "var/publication-figure-registry/v1");
+  console.log(JSON.stringify({ ok: true, root, entry: await promotePublicationFigure(root, input) }, null, 2));
+}
+
+async function generateProposalVisuals(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const proposalPath = resolve(options.positionals[0] ?? "examples/proposal-visual-plan.md");
+  const outputDir = resolve(optionValue(options, "output-dir") ?? "var/exports/proposal-visuals");
+  const packageOutputPath = resolve(optionValue(options, "package-output") ?? resolve(outputDir, "proposal-visual-package.json"));
+  const proposalText = await readFile(proposalPath, "utf8");
+  const title = optionValue(options, "title") ?? basename(proposalPath, extname(proposalPath));
+  const adobeMode = optionalProposalAdobeMode(optionValue(options, "adobe-mode")) ?? "prepare";
+  const generated = await generateProposalVisualPackage(
+    { schemaVersion: 1, proposal: { title, text: proposalText }, adobeMode },
+    { outputDir, root: optionValue(options, "root") }
+  );
+  await mkdir(outputDir, { recursive: true });
+  const reports: Array<Record<string, unknown>> = [];
+  for (const asset of generated.assets) reports.push(await writeProposalVisualAsset(asset, outputDir, options));
+  const report = {
+    schemaVersion: generated.schemaVersion,
+    ok: generated.ok,
+    proposalPath,
+    outputDir,
+    proposal: generated.proposal,
+    adobeMode: generated.adobeMode,
+    routes: generated.routes,
+    assets: reports
+  };
+  await mkdir(dirname(packageOutputPath), { recursive: true });
+  await writeFile(packageOutputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ packageOutputPath, ...report }, null, 2));
+  if (!generated.ok) throw new ValidationError(`proposal visual generation failed final review; inspect ${packageOutputPath}`);
+}
+
+async function writeProposalVisualAsset(asset: ProposalVisualAsset, outputDir: string, options: ParsedOptions): Promise<Record<string, unknown>> {
+  if (asset.renderer === "adobe_svg_proof") {
+    const workflowOutputPath = resolve(outputDir, `${asset.id}.adobe-workflow.json`);
+    await writeFile(workflowOutputPath, `${JSON.stringify(asset.workflow, null, 2)}\n`, "utf8");
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      renderer: asset.renderer,
+      prompt: asset.prompt,
+      source: asset.source,
+      adobeMode: asset.adobeMode,
+      workflowOutputPath,
+      outputPath: asset.outputPath,
+      proofPngPath: asset.proofPngPath,
+      ok: asset.workflow.ok
+    };
+  }
+  const latexOutputPath = resolve(outputDir, `${asset.id}.tex`);
+  const pdfOutputPath = resolve(outputDir, `${asset.id}.pdf`);
+  await writeFile(latexOutputPath, asset.generated.latex, "utf8");
+  const compiled = await compileLatexWithTectonic(asset.generated.latex, { enginePath: resolveTectonicPath(options) });
+  await writeFile(pdfOutputPath, compiled.pdf);
+  if (asset.renderer === "latex_table") {
+    const tableOutputPath = resolve(outputDir, `${asset.id}.table.json`);
+    await writeFile(tableOutputPath, `${JSON.stringify(asset.generated.table, null, 2)}\n`, "utf8");
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      renderer: asset.renderer,
+      prompt: asset.prompt,
+      source: asset.source,
+      tableOutputPath,
+      latexOutputPath,
+      pdfOutputPath,
+      pdfBytes: compiled.bytes,
+      pdfSha256: compiled.sha256,
+      counts: asset.generated.counts
+    };
+  }
+  const manifestOutputPath = resolve(outputDir, `${asset.id}.manifest.json`);
+  const intermediateOutputPath = resolve(outputDir, `${asset.id}.intermediate.json`);
+  const sceneOutputPath = resolve(outputDir, `${asset.id}.scene.json`);
+  const svgOutputPath = resolve(outputDir, `${asset.id}.svg`);
+  const pngOutputPath = resolve(outputDir, `${asset.id}.png`);
+  await writeFile(manifestOutputPath, `${JSON.stringify(asset.generated.manifest, null, 2)}\n`, "utf8");
+  await writeFile(intermediateOutputPath, `${JSON.stringify(asset.generated.intermediate, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, asset.generated.sceneJson, "utf8");
+  await writeFile(svgOutputPath, asset.generated.svg, "utf8");
+  await writeFile(pngOutputPath, asset.generated.png.png);
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    renderer: asset.renderer,
+    prompt: asset.prompt,
+    source: asset.source,
+    manifestOutputPath,
+    intermediateOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    latexOutputPath,
+    pdfOutputPath,
+    pdfBytes: compiled.bytes,
+    pdfSha256: compiled.sha256,
+    manifest: asset.generated.manifest
+  };
+}
+
+async function renderBooleanGeometryBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/polygon-boolean-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/polygon-boolean-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/polygon-boolean-basics.png");
+  const scene = normalizeScene(composeBooleanGeometryBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({
+    ok: true,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    width: png.width,
+    height: png.height,
+    bytes: png.png.length,
+    elementCount: scene.elements.length,
+    semanticObjectCount: scene.semantics?.objects.length ?? 0,
+    engine: "polygon-clipping-0.15.7"
+  }, null, 2));
+}
+
+async function renderCurveGeometryBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/curve-geometry-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/curve-geometry-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/curve-geometry-basics.png");
+  const scene = normalizeScene(composeCurveGeometryBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({
+    ok: true,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    width: png.width,
+    height: png.height,
+    bytes: png.png.length,
+    elementCount: scene.elements.length,
+    semanticObjectCount: scene.semantics?.objects.length ?? 0,
+    geometry: "adaptive-cubic-bezier-flattening"
+  }, null, 2));
+}
+
+async function renderStrokeExpansionBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/stroke-expansion-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/stroke-expansion-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/stroke-expansion-basics.png");
+  const scene = normalizeScene(composeStrokeExpansionBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, elementCount: scene.elements.length, semanticObjectCount: scene.semantics?.objects.length ?? 0, geometry: "software-stroke-expansion.v1" }, null, 2));
+}
+
+async function renderPathMarkerBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/path-marker-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/path-marker-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/path-marker-basics.png");
+  const scene = normalizeScene(composePathMarkerBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, elementCount: scene.elements.length, semanticObjectCount: scene.semantics?.objects.length ?? 0, geometry: "software-path-markers.v1" }, null, 2));
+}
+
+async function renderVectorPaintBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/vector-paint-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/vector-paint-basics.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/vector-paint-basics.png");
+  const scene = normalizeScene(composeVectorPaintBasicsScene());
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, pngOptions(options, "png-"));
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, pngOutputPath, width: png.width, height: png.height, bytes: png.png.length, elementCount: scene.elements.length, paintCount: scene.paints?.length ?? 0, semanticObjectCount: scene.semantics?.objects.length ?? 0, renderer: "software-vector-paints.v1" }, null, 2));
+}
+
+async function composeScientific(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const specPath = options.positionals[0] ?? "examples/scientific-symbol-composition.json";
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-symbol-composition.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-symbol-composition.svg");
+  const scene = composeScientificDiagram(await readJsonFile(specPath));
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        specPath: resolve(specPath),
+        sceneOutputPath,
+        svgOutputPath,
+        symbolCount: scene.semantics?.objects.length ?? 0,
+        relationshipCount: scene.semantics?.relationships?.length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function generateScientificFigure(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const specPath = options.positionals[0] ?? "examples/scientific-figure-spec.json";
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-figure.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-figure.svg");
+  const scene = compileScientificFigure(await readJsonFile(specPath));
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(JSON.stringify({
+    ok: true,
+    specPath: resolve(specPath),
+    sceneOutputPath,
+    svgOutputPath,
+    objectCount: scene.semantics?.objects.length ?? 0,
+    relationshipCount: scene.semantics?.relationships?.length ?? 0,
+    elementCount: scene.elements.length
+  }, null, 2));
+}
+
+async function generateScientificStory(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const storyPath = options.positionals[0] ?? "examples/scientific-story.json";
+  const figureOutputPath = resolve(optionValue(options, "figure-output") ?? "var/exports/scientific-story.figure.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-story.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-story.svg");
+  const figure = planScientificStory(await readJsonFile(storyPath));
+  const scene = compileScientificFigure(figure);
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(figureOutputPath), { recursive: true });
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(figureOutputPath, `${JSON.stringify(figure, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(JSON.stringify({
+    ok: true,
+    storyPath: resolve(storyPath),
+    figureOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    objectCount: scene.semantics?.objects.length ?? 0,
+    relationshipCount: scene.semantics?.relationships?.length ?? 0,
+    elementCount: scene.elements.length
+  }, null, 2));
+}
+
+async function generateScientificText(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const textPath = options.positionals[0] ?? "examples/scientific-controlled-text.txt";
+  const parseOutputPath = resolve(optionValue(options, "parse-output") ?? "var/exports/scientific-controlled-text.parse.json");
+  const figureOutputPath = resolve(optionValue(options, "figure-output") ?? "var/exports/scientific-controlled-text.figure.json");
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/scientific-controlled-text.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/scientific-controlled-text.svg");
+  const pngOutputPath = resolve(optionValue(options, "png-output") ?? "var/exports/scientific-controlled-text.png");
+  const parsed = parseScientificText(await readFile(textPath, "utf8"));
+  const figure = planScientificStory(parsed.story);
+  const scene = compileScientificFigure(figure);
+  const svg = renderSceneToSvg(scene);
+  const png = renderSceneToPng(scene, {
+    ...pngOptions(options, "png-"),
+    background: optionValue(options, "png-background") ?? "#FFFFFF"
+  });
+
+  await mkdir(dirname(parseOutputPath), { recursive: true });
+  await mkdir(dirname(figureOutputPath), { recursive: true });
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await mkdir(dirname(pngOutputPath), { recursive: true });
+  await writeFile(parseOutputPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  await writeFile(figureOutputPath, `${JSON.stringify(figure, null, 2)}\n`, "utf8");
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+  await writeFile(pngOutputPath, png.png);
+
+  console.log(JSON.stringify({
+    ok: true,
+    grammar: parsed.grammar,
+    textPath: resolve(textPath),
+    parseOutputPath,
+    figureOutputPath,
+    sceneOutputPath,
+    svgOutputPath,
+    pngOutputPath,
+    statementCount: parsed.statements.length,
+    objectCount: scene.semantics?.objects.length ?? 0,
+    relationshipCount: scene.semantics?.relationships?.length ?? 0,
+    elementCount: scene.elements.length,
+    pngWidth: png.width,
+    pngHeight: png.height,
+    pngBytes: png.png.length,
+    pngRenderer: png.renderer
+  }, null, 2));
+}
+
+async function renderTransformBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/transform-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/transform-basics.svg");
+  const scene = composeTransformBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(JSON.stringify({ ok: true, sceneOutputPath, svgOutputPath, elementCount: scene.elements.length }, null, 2));
+}
+
+async function renderCompositionBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/composition-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/composition-basics.svg");
+  const scene = composeCompositionBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      { ok: true, sceneOutputPath, svgOutputPath, groupCount: scene.groups?.length ?? 0, elementCount: scene.elements.length },
+      null,
+      2
+    )
+  );
+}
+
+async function renderConstraintBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/constraint-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/constraint-basics.svg");
+  const scene = composeConstraintBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        sceneOutputPath,
+        svgOutputPath,
+        objectCount: scene.semantics?.objects.length ?? 0,
+        relationshipCount: scene.semantics?.relationships?.length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function renderRoutingBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/routing-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/routing-basics.svg");
+  const scene = composeRoutingBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        sceneOutputPath,
+        svgOutputPath,
+        routeCount: scene.semantics?.relationships?.length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function renderLabelStyleBasics(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const sceneOutputPath = resolve(optionValue(options, "scene-output") ?? "var/exports/label-style-basics.scene.json");
+  const svgOutputPath = resolve(optionValue(options, "svg-output") ?? "var/exports/label-style-basics.svg");
+  const scene = composeLabelStyleBasicsScene();
+  const svg = renderSceneToSvg(scene);
+
+  await mkdir(dirname(sceneOutputPath), { recursive: true });
+  await mkdir(dirname(svgOutputPath), { recursive: true });
+  await writeFile(sceneOutputPath, `${JSON.stringify(scene, null, 2)}\n`, "utf8");
+  await writeFile(svgOutputPath, svg, "utf8");
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        sceneOutputPath,
+        svgOutputPath,
+        labeledObjectCount: scene.semantics?.objects.filter((object) => object.properties?.labelPosition !== undefined).length ?? 0,
+        elementCount: scene.elements.length
+      },
+      null,
+      2
+    )
+  );
+}
+
 async function makeExport(args: string[]): Promise<void> {
   const options = parseOptions(args);
   const format = optionValue(options, "format") ?? "pdf";
@@ -188,11 +1303,62 @@ async function makeExport(args: string[]): Promise<void> {
   console.log(JSON.stringify({ ok: true, job: generatedJobSummary(job) }, null, 2));
 }
 
+async function makePhotoshopSvgProof(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const inputPath = options.positionals[0];
+  const outputPath = optionValue(options, "output");
+
+  if (!inputPath) {
+    throw new ValidationError("photoshop:proof-svg requires an input SVG path");
+  }
+
+  if (!outputPath) {
+    throw new ValidationError("photoshop:proof-svg requires --output PATH");
+  }
+
+  const job = await createGeneratedPhotoshopJob(
+    {
+      kind: "svg_proof",
+      inputPath,
+      outputPath,
+      width: optionValue(options, "width") ? Number(optionValue(options, "width")) : undefined,
+      height: optionValue(options, "height") ? Number(optionValue(options, "height")) : undefined,
+      resolution: optionValue(options, "resolution") ? Number(optionValue(options, "resolution")) : undefined
+    },
+    optionValue(options, "root")
+  );
+
+  console.log(JSON.stringify({ ok: true, job: generatedPhotoshopJobSummary(job) }, null, 2));
+}
+
 async function illustratorDetect(args: string[]): Promise<void> {
   const options = parseOptions(args);
   const platform = optionalLaunchPlatform(optionValue(options, "platform"));
   const candidates = await detectIllustratorApps(platform);
   console.log(JSON.stringify({ ok: true, platform: platform ?? "auto", candidates }, null, 2));
+}
+
+async function photoshopDetect(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const result = await detectPhotoshopDesktop({
+    platform: optionalLaunchPlatform(optionValue(options, "platform")),
+    crashLookbackMinutes: optionValue(options, "crash-lookback-minutes") ? Number(optionValue(options, "crash-lookback-minutes")) : undefined,
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined
+  });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function chatGptDetect(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const result = await detectAuraCallChatGptBrowser({
+    command: optionValue(options, "auracall-command"),
+    timeoutSeconds: optionValue(options, "timeout-seconds") ? Number(optionValue(options, "timeout-seconds")) : undefined,
+    operationTimeoutSeconds: optionValue(options, "operation-timeout-seconds") ? Number(optionValue(options, "operation-timeout-seconds")) : undefined,
+    localOnly: !flagValue(options, "live"),
+    pruneBrowserState: !flagValue(options, "no-prune"),
+    workdir: process.cwd()
+  });
+  console.log(JSON.stringify(result, null, 2));
 }
 
 async function illustratorProbe(args: string[]): Promise<void> {
@@ -235,6 +1401,26 @@ async function illustratorMouse(args: string[]): Promise<void> {
     endRelativeY: optionValue(options, "to-y") ? Number(optionValue(options, "to-y")) : undefined,
     durationMs: optionValue(options, "duration-ms") ? Number(optionValue(options, "duration-ms")) : undefined,
     windowTitlePattern: optionValue(options, "window-title"),
+    toolShortcut: optionValue(options, "tool-shortcut"),
+    dryRun: flagValue(options, "dry-run")
+  });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function photoshopMouse(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const platform = resolveLaunchPlatform(optionalLaunchPlatform(optionValue(options, "platform")));
+  const result = await drivePhotoshopMouse({
+    platform,
+    action: optionalMouseAction(optionValue(options, "action")),
+    button: optionalMouseButton(optionValue(options, "button")),
+    relativeX: optionValue(options, "x") ? Number(optionValue(options, "x")) : undefined,
+    relativeY: optionValue(options, "y") ? Number(optionValue(options, "y")) : undefined,
+    endRelativeX: optionValue(options, "to-x") ? Number(optionValue(options, "to-x")) : undefined,
+    endRelativeY: optionValue(options, "to-y") ? Number(optionValue(options, "to-y")) : undefined,
+    durationMs: optionValue(options, "duration-ms") ? Number(optionValue(options, "duration-ms")) : undefined,
+    windowTitlePattern: optionValue(options, "window-title"),
+    toolShortcut: optionValue(options, "tool-shortcut"),
     dryRun: flagValue(options, "dry-run")
   });
   console.log(JSON.stringify(result, null, 2));
@@ -396,7 +1582,27 @@ async function jobRunCom(args: string[]): Promise<void> {
   const result = await runJsxViaIllustratorCom(jobPath, {
     platform,
     dryRun: flagValue(options, "dry-run"),
-    root: optionValue(options, "root")
+    root: optionValue(options, "root"),
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined
+  });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function jobRunPhotoshopCom(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const id = options.positionals[0];
+
+  if (!id) {
+    throw new ValidationError("job:run-photoshop-com requires a job id");
+  }
+
+  const platform = resolveLaunchPlatform(optionalLaunchPlatform(optionValue(options, "platform")));
+  const { jobPath } = await getGeneratedJobPaths(normalizeJobId(id), optionValue(options, "root"));
+  const result = await runJsxViaPhotoshopCom(jobPath, {
+    platform,
+    dryRun: flagValue(options, "dry-run"),
+    root: optionValue(options, "root"),
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined
   });
   console.log(JSON.stringify(result, null, 2));
 }
@@ -624,6 +1830,243 @@ async function workflowExecuteCartoon(args: string[]): Promise<void> {
   console.log(JSON.stringify(execution, null, 2));
 }
 
+async function workflowAdobeSvgProof(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const prompt = options.positionals.join(" ");
+  const outputPath = optionValue(options, "output");
+
+  if (!prompt) {
+    throw new ValidationError("workflow:adobe-svg-proof requires a prompt");
+  }
+
+  if (!outputPath) {
+    throw new ValidationError("workflow:adobe-svg-proof requires --output PATH");
+  }
+
+  const workflow = await prepareAdobeSvgProofWorkflow({
+    prompt,
+    outputPath,
+    proofPngPath: optionValue(options, "proof-output"),
+    root: optionValue(options, "root"),
+    corpusPath: optionValue(options, "corpus"),
+    title: optionValue(options, "title"),
+    width: optionValue(options, "width") ? Number(optionValue(options, "width")) : undefined,
+    height: optionValue(options, "height") ? Number(optionValue(options, "height")) : undefined,
+    intent: optionalAdobeArtworkIntent(optionValue(options, "intent")),
+    plannerMode: optionalPlannerMode(optionValue(options, "planner")),
+    openAiModel: optionValue(options, "model"),
+    proofWidth: optionValue(options, "proof-width") ? Number(optionValue(options, "proof-width")) : undefined,
+    proofHeight: optionValue(options, "proof-height") ? Number(optionValue(options, "proof-height")) : undefined,
+    proofResolution: optionValue(options, "proof-resolution") ? Number(optionValue(options, "proof-resolution")) : undefined
+  });
+
+  console.log(JSON.stringify(workflow, null, 2));
+}
+
+async function workflowExecuteAdobeSvgProof(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const prompt = options.positionals.join(" ");
+  const outputPath = optionValue(options, "output");
+  const dryRun = flagValue(options, "dry-run");
+
+  if (!prompt) {
+    throw new ValidationError("workflow:execute-adobe-svg-proof requires a prompt");
+  }
+
+  if (!outputPath) {
+    throw new ValidationError("workflow:execute-adobe-svg-proof requires --output PATH");
+  }
+
+  const execution = await executeAdobeSvgProofWorkflow({
+    prompt,
+    outputPath,
+    proofPngPath: optionValue(options, "proof-output"),
+    root: optionValue(options, "root"),
+    corpusPath: optionValue(options, "corpus"),
+    title: optionValue(options, "title"),
+    width: optionValue(options, "width") ? Number(optionValue(options, "width")) : undefined,
+    height: optionValue(options, "height") ? Number(optionValue(options, "height")) : undefined,
+    intent: optionalAdobeArtworkIntent(optionValue(options, "intent")),
+    plannerMode: optionalPlannerMode(optionValue(options, "planner")),
+    openAiModel: optionValue(options, "model"),
+    proofWidth: optionValue(options, "proof-width") ? Number(optionValue(options, "proof-width")) : undefined,
+    proofHeight: optionValue(options, "proof-height") ? Number(optionValue(options, "proof-height")) : undefined,
+    proofResolution: optionValue(options, "proof-resolution") ? Number(optionValue(options, "proof-resolution")) : undefined,
+    launchPlatform: optionalLaunchPlatform(optionValue(options, "platform")),
+    appPath: optionValue(options, "app"),
+    illustratorRunMode: optionalAdobeSvgProofRunMode(optionValue(options, "illustrator-run-mode")),
+    photoshopPlatform: optionalLaunchPlatform(optionValue(options, "photoshop-platform")),
+    dryRun,
+    waitForResults: dryRun ? false : !flagValue(options, "no-wait"),
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined,
+    intervalMs: optionValue(options, "interval-ms") ? Number(optionValue(options, "interval-ms")) : undefined,
+    skipQa: flagValue(options, "skip-qa"),
+    skipArtworkReview: flagValue(options, "skip-review"),
+    minBytes: optionValue(options, "min-bytes") ? Number(optionValue(options, "min-bytes")) : undefined,
+    minWidth: optionValue(options, "min-width") ? Number(optionValue(options, "min-width")) : undefined,
+    minHeight: optionValue(options, "min-height") ? Number(optionValue(options, "min-height")) : undefined,
+    minNonBlankRatio: optionValue(options, "min-nonblank-ratio") ? Number(optionValue(options, "min-nonblank-ratio")) : undefined,
+    proofMinWidth: optionValue(options, "proof-min-width") ? Number(optionValue(options, "proof-min-width")) : undefined,
+    proofMinHeight: optionValue(options, "proof-min-height") ? Number(optionValue(options, "proof-min-height")) : undefined,
+    proofMinNonBlankRatio: optionValue(options, "proof-min-nonblank-ratio") ? Number(optionValue(options, "proof-min-nonblank-ratio")) : undefined,
+    maxReviewIterations: optionValue(options, "max-review-iterations") ? Number(optionValue(options, "max-review-iterations")) : undefined
+  });
+
+  console.log(JSON.stringify(execution, null, 2));
+}
+
+async function workflowAdobeProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const prompt = options.positionals.join(" ");
+  const outputPath = optionValue(options, "output");
+
+  if (!prompt) {
+    throw new ValidationError("workflow:adobe-project requires a prompt");
+  }
+
+  if (!outputPath) {
+    throw new ValidationError("workflow:adobe-project requires --output PATH");
+  }
+
+  const workflow = await prepareAdobeProjectWorkflow({
+    prompt,
+    outputPath,
+    sourceSvgPath: optionValue(options, "source-svg"),
+    photoshopReferencePngPath: optionValue(options, "photoshop-reference"),
+    photoshopHandoffSvgPath: optionValue(options, "photoshop-handoff-svg"),
+    photoshopWorkingPsdPath: optionValue(options, "photoshop-working-psd"),
+    photoshopFeedbackPath: optionValue(options, "photoshop-feedback"),
+    root: optionValue(options, "root"),
+    corpusPath: optionValue(options, "corpus"),
+    title: optionValue(options, "title"),
+    width: optionValue(options, "width") ? Number(optionValue(options, "width")) : undefined,
+    height: optionValue(options, "height") ? Number(optionValue(options, "height")) : undefined,
+    intent: optionalAdobeArtworkIntent(optionValue(options, "intent")),
+    plannerMode: optionalPlannerMode(optionValue(options, "planner")),
+    openAiModel: optionValue(options, "model"),
+    proofWidth: optionValue(options, "proof-width") ? Number(optionValue(options, "proof-width")) : undefined,
+    proofHeight: optionValue(options, "proof-height") ? Number(optionValue(options, "proof-height")) : undefined,
+    proofResolution: optionValue(options, "proof-resolution") ? Number(optionValue(options, "proof-resolution")) : undefined,
+    referenceOpacity: optionValue(options, "reference-opacity") ? Number(optionValue(options, "reference-opacity")) : undefined,
+    embedReference: flagValue(options, "embed-reference"),
+    visibleMouseProof: flagValue(options, "visible-mouse-proof")
+  });
+
+  console.log(JSON.stringify(workflow, null, 2));
+}
+
+async function workflowPreflightAdobeProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const externalReviewProvider = optionalExternalReviewProvider(optionValue(options, "external-review-provider"));
+  const result = await preflightAdobeProjectWorkflow({
+    illustratorPlatform: optionalLaunchPlatform(optionValue(options, "platform")),
+    photoshopPlatform: optionalLaunchPlatform(optionValue(options, "photoshop-platform")),
+    photoshopCrashLookbackMinutes: optionValue(options, "photoshop-crash-lookback-minutes")
+      ? Number(optionValue(options, "photoshop-crash-lookback-minutes"))
+      : undefined,
+    photoshopTimeoutMs: optionValue(options, "photoshop-timeout-ms") ? Number(optionValue(options, "photoshop-timeout-ms")) : undefined,
+    requireChatGptBrowser: flagValue(options, "require-chatgpt-browser") || externalReviewProvider === "auracall",
+    auracallCommand: optionValue(options, "auracall-command"),
+    chatGptTimeoutSeconds: optionValue(options, "chatgpt-timeout-seconds") ? Number(optionValue(options, "chatgpt-timeout-seconds")) : undefined,
+    chatGptOperationTimeoutSeconds: optionValue(options, "chatgpt-operation-timeout-seconds")
+      ? Number(optionValue(options, "chatgpt-operation-timeout-seconds"))
+      : undefined
+  });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function workflowExecuteAdobeProject(args: string[]): Promise<void> {
+  const options = parseOptions(args);
+  const prompt = options.positionals.join(" ");
+  const outputPath = optionValue(options, "output");
+  const dryRun = flagValue(options, "dry-run");
+  const externalReviewVerdictPath = optionValue(options, "external-review-verdict");
+  const externalReviewPacketPath = optionValue(options, "external-review-packet");
+  const reviewReportPath = optionValue(options, "review-report");
+  const externalReviewVerdict = externalReviewVerdictPath ? await readJsonFile(externalReviewVerdictPath) : undefined;
+  const externalReviewProvider = optionalExternalReviewProvider(optionValue(options, "external-review-provider"));
+  const externalReview =
+    externalReviewProvider === "auracall"
+      ? createAuraCallExternalArtworkReviewRunner({
+          command: optionValue(options, "auracall-command"),
+          model: optionValue(options, "external-review-model"),
+          timeoutSeconds: optionValue(options, "external-review-timeout-seconds")
+            ? Number(optionValue(options, "external-review-timeout-seconds"))
+            : undefined,
+          workdir: process.cwd(),
+          packetPath: externalReviewPacketPath,
+          outputPath: optionValue(options, "external-review-output"),
+          preflightBrowserReadiness: !flagValue(options, "no-external-review-preflight"),
+          preflightTimeoutSeconds: optionValue(options, "external-review-preflight-timeout-seconds")
+            ? Number(optionValue(options, "external-review-preflight-timeout-seconds"))
+            : undefined
+        })
+      : undefined;
+
+  if (!prompt) {
+    throw new ValidationError("workflow:execute-adobe-project requires a prompt");
+  }
+
+  if (!outputPath) {
+    throw new ValidationError("workflow:execute-adobe-project requires --output PATH");
+  }
+
+  const execution = await executeAdobeProjectWorkflow({
+    prompt,
+    outputPath,
+    sourceSvgPath: optionValue(options, "source-svg"),
+    photoshopReferencePngPath: optionValue(options, "photoshop-reference"),
+    photoshopHandoffSvgPath: optionValue(options, "photoshop-handoff-svg"),
+    photoshopWorkingPsdPath: optionValue(options, "photoshop-working-psd"),
+    photoshopFeedbackPath: optionValue(options, "photoshop-feedback"),
+    root: optionValue(options, "root"),
+    corpusPath: optionValue(options, "corpus"),
+    title: optionValue(options, "title"),
+    width: optionValue(options, "width") ? Number(optionValue(options, "width")) : undefined,
+    height: optionValue(options, "height") ? Number(optionValue(options, "height")) : undefined,
+    intent: optionalAdobeArtworkIntent(optionValue(options, "intent")),
+    plannerMode: optionalPlannerMode(optionValue(options, "planner")),
+    openAiModel: optionValue(options, "model"),
+    proofWidth: optionValue(options, "proof-width") ? Number(optionValue(options, "proof-width")) : undefined,
+    proofHeight: optionValue(options, "proof-height") ? Number(optionValue(options, "proof-height")) : undefined,
+    proofResolution: optionValue(options, "proof-resolution") ? Number(optionValue(options, "proof-resolution")) : undefined,
+    referenceOpacity: optionValue(options, "reference-opacity") ? Number(optionValue(options, "reference-opacity")) : undefined,
+    embedReference: flagValue(options, "embed-reference"),
+    visibleMouseProof: flagValue(options, "visible-mouse-proof"),
+    visibleMouseDurationMs: optionValue(options, "visible-mouse-duration-ms") ? Number(optionValue(options, "visible-mouse-duration-ms")) : undefined,
+    illustratorMouseToolShortcut: optionValue(options, "illustrator-mouse-tool"),
+    photoshopMouseToolShortcut: optionValue(options, "photoshop-mouse-tool"),
+    illustratorMouseWindowTitlePattern: optionValue(options, "illustrator-mouse-window-title"),
+    photoshopMouseWindowTitlePattern: optionValue(options, "photoshop-mouse-window-title"),
+    launchPlatform: optionalLaunchPlatform(optionValue(options, "platform")),
+    appPath: optionValue(options, "app"),
+    illustratorRunMode: optionalAdobeSvgProofRunMode(optionValue(options, "illustrator-run-mode")),
+    photoshopPlatform: optionalLaunchPlatform(optionValue(options, "photoshop-platform")),
+    dryRun,
+    waitForResults: dryRun ? false : !flagValue(options, "no-wait"),
+    timeoutMs: optionValue(options, "timeout-ms") ? Number(optionValue(options, "timeout-ms")) : undefined,
+    intervalMs: optionValue(options, "interval-ms") ? Number(optionValue(options, "interval-ms")) : undefined,
+    skipQa: flagValue(options, "skip-qa"),
+    skipArtworkReview: flagValue(options, "skip-review"),
+    minBytes: optionValue(options, "min-bytes") ? Number(optionValue(options, "min-bytes")) : undefined,
+    minWidth: optionValue(options, "min-width") ? Number(optionValue(options, "min-width")) : undefined,
+    minHeight: optionValue(options, "min-height") ? Number(optionValue(options, "min-height")) : undefined,
+    minNonBlankRatio: optionValue(options, "min-nonblank-ratio") ? Number(optionValue(options, "min-nonblank-ratio")) : undefined,
+    proofMinWidth: optionValue(options, "proof-min-width") ? Number(optionValue(options, "proof-min-width")) : undefined,
+    proofMinHeight: optionValue(options, "proof-min-height") ? Number(optionValue(options, "proof-min-height")) : undefined,
+    proofMinNonBlankRatio: optionValue(options, "proof-min-nonblank-ratio") ? Number(optionValue(options, "proof-min-nonblank-ratio")) : undefined,
+    maxReviewIterations: optionValue(options, "max-review-iterations") ? Number(optionValue(options, "max-review-iterations")) : undefined,
+    externalReview,
+    externalReviewPacketPath,
+    externalReviewVerdict,
+    requireExternalReviewPass: flagValue(options, "require-external-review") || externalReviewProvider === "auracall",
+    externalReviewMinScore: optionValue(options, "external-review-min-score") ? Number(optionValue(options, "external-review-min-score")) : undefined,
+    reviewReportPath
+  });
+
+  console.log(JSON.stringify(execution, null, 2));
+}
+
 async function workflowObject(args: string[]): Promise<void> {
   const options = parseOptions(args);
   const prompt = options.positionals.join(" ");
@@ -702,7 +2145,23 @@ interface ParsedOptions {
   flags: Set<string>;
 }
 
-const flagOptions = new Set(["dry-run", "no-wait", "skip-qa", "skip-review", "wait", "auto-confirm-dialog", "draw-circle", "draw-complex", "mouse-proof"]);
+const flagOptions = new Set([
+  "dry-run",
+  "no-wait",
+  "skip-qa",
+  "skip-review",
+  "wait",
+  "auto-confirm-dialog",
+  "draw-circle",
+  "draw-complex",
+  "mouse-proof",
+  "visible-mouse-proof",
+  "embed-reference",
+  "require-external-review",
+  "require-chatgpt-browser",
+  "no-external-review-preflight",
+  "pdf"
+]);
 
 function parseOptions(args: string[]): ParsedOptions {
   const positionals: string[] = [];
@@ -744,6 +2203,22 @@ function optionValue(options: ParsedOptions, key: string): string | undefined {
   return options.values.get(key);
 }
 
+function pngOptions(options: ParsedOptions, prefix = ""): PngRenderOptions {
+  const numeric = (name: string): number | undefined => {
+    const value = optionValue(options, `${prefix}${name}`);
+    if (value === undefined) return undefined;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) throw new ValidationError(`${prefix}${name} must be a finite number`);
+    return parsed;
+  };
+  return {
+    ...(numeric("width") === undefined ? {} : { width: numeric("width") }),
+    ...(numeric("height") === undefined ? {} : { height: numeric("height") }),
+    ...(numeric("scale") === undefined ? {} : { scale: numeric("scale") }),
+    ...(optionValue(options, `${prefix}background`) === undefined ? {} : { background: optionValue(options, `${prefix}background`) })
+  };
+}
+
 function flagValue(options: ParsedOptions, key: string): boolean {
   const value = options.values.get(key);
   if (value !== undefined) {
@@ -782,6 +2257,13 @@ function objectArg(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function resolveTectonicPath(options: ParsedOptions): string | undefined {
+  const configured = optionValue(options, "tectonic-bin");
+  if (configured !== undefined) return resolve(configured);
+  const local = resolve("var/tools/tectonic/tectonic");
+  return existsSync(local) ? local : undefined;
+}
+
 function sceneFromJson(value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return value;
@@ -809,22 +2291,63 @@ Commands:
   mcp:serve
   jsx:ping [--message TEXT] [--root DIR]
   jsx:cartoon [SCENE_JSON_PATH] [--root DIR]
+  render:svg [SCENE_JSON_PATH] [--output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  render:tikz [SCENE_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
+  render:png [SCENE_JSON_PATH] [--output PNG_PATH] [--width N | --height N | --scale N] [--background transparent|#RRGGBB|#RRGGBBAA]
+  render:composite [COMPOSITION_JSON_PATH] [--output PNG_PATH] [--svg-output SVG_PATH] [--width N | --height N | --scale N] [--background transparent|#RRGGBB|#RRGGBBAA]
+  scientific:compose [SPEC_JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH]
+  scientific:generate [SPEC_JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH]
+  scientific:story [STORY_JSON_PATH] [--figure-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH]
+  scientific:text [TEXT_PATH] [--parse-output JSON_PATH] [--figure-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  scientific:plot [PLOT_JSON_PATH] [--result-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  scientific:pgfplots [PLOT_JSON_PATH] [--output TEX_PATH] [--pdf-output PDF_PATH] [--tectonic-bin PATH]
+  scientific:proposal-concept PLAN_JSON_PATH --output-dir FRESH_DIR [--pdf]
+  scientific:image [REQUEST_JSON_PATH] [--manifest-output JSON_PATH] [--intermediate-output JSON_PATH] [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--latex-output TEX_PATH] [--latex-pdf-output PDF_PATH] [--png-output PNG_PATH] [--tectonic-bin PATH]
+  scientific:prompt-plan REQUEST_JSON_PATH [--output-dir DIR] [--registry DIR] [--planner-output REVIEWED_SEMANTICS_JSON_PATH | --planner-adapter CONFIG_JSON_PATH] [--tectonic-bin PATH]
+  scientific:shape-benchmark [--output-dir DIR] [--prompt TEXT]
+  scientific:shape-loop [--baseline CANDIDATE_ID] [--reviewer TEXT] [--approved-at ISO_DATE] [--generations N] [--output-dir DIR]
+  scientific:lifelike-loop [--reviewer TEXT] [--approved-at ISO_DATE] [--generations N] [--output-dir DIR]
+  scientific:approve-brief PROJECT_JSON_PATH --reviewer TEXT --reviewed-at ISO_DATE --output PROJECT_JSON_PATH
+  scientific:approve-final PROJECT_JSON_PATH --evidence FINAL_EVIDENCE_JSON_PATH --reviewer TEXT --reviewed-at ISO_DATE --output PROJECT_JSON_PATH
+  scientific:registry-search QUERY_JSON_PATH [--registry DIR]
+  scientific:registry-rebuild [--registry DIR]
+  scientific:registry-promote PROMOTION_BUNDLE_JSON_PATH [--registry DIR]
+  proposal:visuals [PROPOSAL_MARKDOWN_PATH] [--output-dir DIR] [--package-output JSON_PATH] [--title TEXT] [--adobe-mode prepare|dry_run|execute] [--tectonic-bin PATH] [--root DIR]
+  geometry:boolean [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:flatten-curve [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:expand-stroke [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:path-markers [REQUEST_JSON_PATH] [--output RESULT_JSON_PATH]
+  geometry:boolean-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  geometry:curve-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  geometry:stroke-expansion-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  geometry:path-marker-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
+  render:paint-basics [--scene-output JSON_PATH] [--svg-output SVG_PATH] [--png-output PNG_PATH] [--png-width N | --png-height N | --png-scale N] [--png-background transparent|#RRGGBB|#RRGGBBAA]
   jsx:export --output PATH [--format pdf|svg|png|jpg] [--root DIR]
+  photoshop:detect [--platform auto|windows|wsl] [--crash-lookback-minutes N] [--timeout-ms N]
+  chatgpt:detect [--auracall-command PATH] [--timeout-seconds N] [--operation-timeout-seconds N] [--live] [--no-prune]
+  photoshop:proof-svg SVG_PATH --output PNG_PATH [--width N] [--height N] [--resolution N] [--root DIR]
   illustrator:detect [--platform auto|macos|windows|wsl|linux]
   illustrator:probe [--platform auto|macos|windows|wsl|linux] [--method auto|desktop|com] [--app PATH_OR_NAME] [--dry-run] [--wait] [--auto-confirm-dialog] [--draw-circle] [--draw-complex] [--mouse-proof] [--mouse-action move|click|double-click|drag] [--timeout-ms N] [--dialog-timeout-ms N] [--root DIR]
-  illustrator:mouse [--platform windows|wsl] [--action move|click|double-click|drag] [--button left|right] [--x 0.5] [--y 0.5] [--to-x 0.7] [--to-y 0.5] [--duration-ms N] [--window-title REGEX] [--dry-run]
+  illustrator:mouse [--platform windows|wsl] [--action move|click|double-click|drag] [--button left|right] [--x 0.5] [--y 0.5] [--to-x 0.7] [--to-y 0.5] [--duration-ms N] [--tool-shortcut TEXT] [--window-title REGEX] [--dry-run]
+  photoshop:mouse [--platform windows|wsl] [--action move|click|double-click|drag] [--button left|right] [--x 0.5] [--y 0.5] [--to-x 0.7] [--to-y 0.5] [--duration-ms N] [--tool-shortcut TEXT] [--window-title REGEX] [--dry-run]
   plan:cartoon PROMPT [--width N] [--height N] [--title TEXT] [--planner deterministic|auto|openai] [--model MODEL] [--root DIR] [--corpus PATH]
   plan:scientific PROMPT [--width N] [--height N] [--title TEXT] [--evidence-limit N] [--root DIR] [--corpus PATH]
   plan:object PROMPT [--width N] [--height N] [--title TEXT] [--evidence-limit N] [--root DIR] [--corpus PATH]
   guard:object cat|lock|key SCENE_JSON_PATH [--prompt TEXT]
   workflow:cartoon PROMPT --output PATH [--format pdf|svg|png|jpg] [--planner deterministic|auto|openai] [--model MODEL] [--root DIR] [--corpus PATH]
   workflow:execute-cartoon PROMPT --output PATH [--format pdf|svg|png|jpg] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--planner deterministic|auto|openai] [--model MODEL] [--platform auto|macos|windows|wsl|linux] [--app PATH_OR_NAME] [--root DIR] [--corpus PATH] [--min-nonblank-ratio N]
+  workflow:adobe-svg-proof PROMPT --output SVG_PATH [--proof-output PNG_PATH] [--intent auto|cartoon|scientific|object] [--planner deterministic|auto|openai] [--proof-width N] [--proof-height N] [--proof-resolution N] [--root DIR] [--corpus PATH]
+  workflow:execute-adobe-svg-proof PROMPT --output SVG_PATH [--proof-output PNG_PATH] [--intent auto|cartoon|scientific|object] [--illustrator-run-mode launch|com] [--max-review-iterations N] [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--root DIR] [--corpus PATH]
+  workflow:adobe-project PROMPT --output SVG_PATH [--source-svg SVG_PATH] [--photoshop-reference PNG_PATH] [--photoshop-handoff-svg SVG_PATH] [--photoshop-working-psd PSD_PATH] [--photoshop-feedback JSON_PATH] [--intent auto|cartoon|scientific|object] [--reference-opacity N] [--embed-reference] [--visible-mouse-proof] [--root DIR] [--corpus PATH]
+  workflow:preflight-adobe-project [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--photoshop-crash-lookback-minutes N] [--photoshop-timeout-ms N] [--require-chatgpt-browser] [--external-review-provider manual|auracall] [--chatgpt-timeout-seconds N] [--chatgpt-operation-timeout-seconds N] [--auracall-command PATH]
+  workflow:execute-adobe-project PROMPT --output SVG_PATH [--source-svg SVG_PATH] [--photoshop-reference PNG_PATH] [--photoshop-handoff-svg SVG_PATH] [--photoshop-working-psd PSD_PATH] [--photoshop-feedback JSON_PATH] [--intent auto|cartoon|scientific|object] [--illustrator-run-mode launch|com] [--max-review-iterations N] [--reference-opacity N] [--embed-reference] [--visible-mouse-proof] [--visible-mouse-duration-ms N] [--illustrator-mouse-tool TEXT] [--photoshop-mouse-tool TEXT] [--external-review-provider manual|auracall] [--external-review-packet JSON_PATH] [--external-review-output TXT_PATH] [--external-review-verdict JSON_PATH] [--review-report JSON_PATH] [--require-external-review] [--external-review-min-score N] [--external-review-model MODEL] [--external-review-timeout-seconds N] [--external-review-preflight-timeout-seconds N] [--no-external-review-preflight] [--auracall-command PATH] [--platform auto|macos|windows|wsl|linux] [--photoshop-platform auto|windows|wsl] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--root DIR] [--corpus PATH]
   workflow:object PROMPT --output PATH [--format pdf|svg|png|jpg] [--max-guard-iterations N] [--root DIR] [--corpus PATH]
   workflow:execute-object PROMPT --output PATH [--format pdf|svg|png|jpg] [--run-mode launch|com] [--max-guard-iterations N] [--dry-run] [--no-wait] [--skip-qa] [--skip-review] [--platform auto|macos|windows|wsl|linux] [--app PATH_OR_NAME] [--root DIR] [--corpus PATH] [--min-nonblank-ratio N]
   job:status JOB_ID [--root DIR]
   job:wait JOB_ID [--timeout-ms N] [--interval-ms N] [--root DIR]
   job:launch JOB_ID [--platform auto|macos|windows|wsl|linux] [--app PATH_OR_NAME] [--dry-run] [--root DIR]
-  job:run-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--root DIR]
+  job:run-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--timeout-ms N] [--root DIR]
+  job:run-photoshop-com JOB_ID [--platform auto|windows|wsl] [--dry-run] [--timeout-ms N] [--root DIR]
   qa:export PATH [--format pdf|svg|png|jpg] [--min-bytes N] [--min-width N] [--min-height N] [--min-nonblank-ratio N]
   qa:artwork PATH [--scene SCENE_OR_PLAN_JSON] [--prompt TEXT] [--target TEXT] [--format pdf|svg|png|jpg] [--min-bytes N] [--min-width N] [--min-height N] [--min-nonblank-ratio N]
   serve [--host 127.0.0.1] [--port 4317] [--root DIR]
@@ -903,6 +2426,51 @@ function optionalObjectWorkflowRunMode(input: string | undefined): ObjectWorkflo
   const value = input.toLowerCase();
   if (value !== "launch" && value !== "com") {
     throw new ValidationError("run-mode must be launch or com");
+  }
+
+  return value;
+}
+
+function optionalAdobeArtworkIntent(input: string | undefined): AdobeArtworkIntent | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const value = input.toLowerCase();
+  if (value !== "auto" && value !== "cartoon" && value !== "scientific" && value !== "object") {
+    throw new ValidationError("intent must be auto, cartoon, scientific, or object");
+  }
+
+  return value;
+}
+
+function optionalAdobeSvgProofRunMode(input: string | undefined): AdobeSvgProofRunMode | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const value = input.toLowerCase();
+  if (value !== "launch" && value !== "com") {
+    throw new ValidationError("illustrator-run-mode must be launch or com");
+  }
+
+  return value;
+}
+
+function optionalProposalAdobeMode(input: string | undefined): ProposalAdobeMode | undefined {
+  if (input === undefined) return undefined;
+  if (input === "prepare" || input === "dry_run" || input === "execute") return input;
+  throw new ValidationError("adobe-mode must be prepare, dry_run, or execute");
+}
+
+function optionalExternalReviewProvider(input: string | undefined): "manual" | "auracall" | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const value = input.toLowerCase();
+  if (value !== "manual" && value !== "auracall") {
+    throw new ValidationError("external-review-provider must be manual or auracall");
   }
 
   return value;

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "document": { "title": "Catalyst response across temperature", "subtitle": "Model prediction, measured mean ± standard deviation, and baseline response", "width": 1100, "height": 720 },
+  "xAxis": { "label": "Temperature (°C)", "tickCount": 6, "grid": false },
+  "yAxis": { "label": "Conversion (%)", "tickCount": 6, "grid": true },
+  "series": [
+    {
+      "id": "baseline", "label": "Uncatalyzed baseline", "mark": "bar", "color": "#059669", "fillColor": "#A7F3D0", "opacity": 42,
+      "data": [{ "x": 20, "y": 8 }, { "x": 30, "y": 10 }, { "x": 40, "y": 12 }, { "x": 50, "y": 14 }, { "x": 60, "y": 17 }, { "x": 70, "y": 20 }, { "x": 80, "y": 23 }]
+    },
+    {
+      "id": "model", "label": "Kinetic model", "mark": "line", "color": "#2563EB", "strokeWidth": 4,
+      "data": [{ "x": 20, "y": 16 }, { "x": 30, "y": 24 }, { "x": 40, "y": 36 }, { "x": 50, "y": 50 }, { "x": 60, "y": 63 }, { "x": 70, "y": 72 }, { "x": 80, "y": 78 }]
+    },
+    {
+      "id": "measured", "label": "Measured mean ± SD", "mark": "scatter", "color": "#DC2626", "fillColor": "#FEE2E2", "pointRadius": 6,
+      "data": [{ "x": 20, "y": 18, "yError": 3 }, { "x": 30, "y": 22, "yError": 3 }, { "x": 40, "y": 38, "yError": 4 }, { "x": 50, "y": 48, "yError": 5 }, { "x": 60, "y": 66, "yError": 4 }, { "x": 70, "y": 70, "yError": 3 }, { "x": 80, "y": 76, "yError": 4 }]
+    }
+  ],
+  "legend": "right"
+}

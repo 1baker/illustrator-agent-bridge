@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "plot",
+  "content": {
+    "schemaVersion": 1,
+    "document": {
+      "title": "Dose response generated through one image API",
+      "subtitle": "Model line, measured values, uncertainty, and control bars",
+      "width": 1000,
+      "height": 680
+    },
+    "xAxis": { "label": "Dose (mg/L)", "tickCount": 6 },
+    "yAxis": { "label": "Response (%)", "tickCount": 6, "grid": true },
+    "series": [
+      { "id": "control", "label": "Control", "mark": "bar", "color": "#059669", "fillColor": "#A7F3D0", "opacity": 45, "data": [{ "x": 1, "y": 8 }, { "x": 2, "y": 10 }, { "x": 3, "y": 11 }, { "x": 4, "y": 12 }] },
+      { "id": "model", "label": "Model", "mark": "line", "color": "#2563EB", "data": [{ "x": 1, "y": 20 }, { "x": 2, "y": 39 }, { "x": 3, "y": 61 }, { "x": 4, "y": 78 }] },
+      { "id": "measured", "label": "Measured ± SD", "mark": "scatter", "color": "#DC2626", "fillColor": "#FEE2E2", "data": [{ "x": 1, "y": 18, "yError": 3 }, { "x": 2, "y": 42, "yError": 5 }, { "x": 3, "y": 58, "yError": 4 }, { "x": 4, "y": 80, "yError": 5 }] }
+    ]
+  },
+  "output": { "png": { "background": "#FFFFFF" } }
+}

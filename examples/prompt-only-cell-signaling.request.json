@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "ScientificPromptFigureRequest.v1",
+  "id": "prompt-only-cell-signaling",
+  "prompt": "Illustrate a ligand activating a membrane receptor, kinase cascade, and nuclear gene response as a conceptual pathway.",
+  "profile": "proposal",
+  "size": { "preset": "proposal_full_width", "dpi": 300 },
+  "intent": "pathway",
+  "evidence": [],
+  "claimPolicy": "allow_explicit_hypotheses",
+  "planner": "auto",
+  "presentation": { "direction": "left_to_right", "spacing": "open", "density": "balanced" },
+  "registry": { "mode": "disabled", "limit": 0 }
+}

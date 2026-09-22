@@ -1,4 +1,13 @@
-import type { BridgeCommand, CartoonScene, ElementStyle, ExportCommand, GeneratedJob, PathPoint, SceneElement } from "./types.js";
+import type {
+  BridgeCommand,
+  CartoonScene,
+  ElementStyle,
+  ExportCommand,
+  GeneratedJob,
+  PathPoint,
+  PlaceFileReferenceCommand,
+  SceneElement
+} from "./types.js";
 
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 480;
@@ -17,7 +26,15 @@ export function generateJsx(command: BridgeCommand, options: GenerateOptions): s
     return generateCartoonSceneJsx(command.scene, options);
   }
 
-  return generateExportJsx(command, options);
+  if (command.kind === "place_image_reference" || command.kind === "place_file_reference") {
+    return generatePlaceFileReferenceJsx(command, options);
+  }
+
+  if (command.kind === "export") {
+    return generateExportJsx(command, options);
+  }
+
+  throw new Error(`Unsupported Illustrator command kind: ${(command as BridgeCommand).kind}`);
 }
 
 function generatePingJsx(message: string, options: GenerateOptions): string {
@@ -37,6 +54,13 @@ function generatePingJsx(message: string, options: GenerateOptions): string {
 }
 
 function generateCartoonSceneJsx(scene: CartoonScene, options: GenerateOptions): string {
+  if (scene.paints?.length) {
+    throw new Error("The optional Illustrator adapter does not yet support reusable gradient paints; render the authoritative scene to SVG or PNG first.");
+  }
+  const unsupportedComposition = scene.groups?.length || scene.elements.some((element) => element.groupId !== undefined || element.zIndex !== undefined || element.visible !== undefined);
+  if (unsupportedComposition) {
+    throw new Error("The optional Illustrator adapter does not yet support groups, clipping, z-order, or visibility; render SVG or flatten the composition first.");
+  }
   const document = scene.document ?? {};
   const width = document.width ?? DEFAULT_WIDTH;
   const height = document.height ?? DEFAULT_HEIGHT;
@@ -53,7 +77,7 @@ function generateCartoonSceneJsx(scene: CartoonScene, options: GenerateOptions):
     "    var layer = doc.activeLayer;",
     `    layer.name = ${jsonLiteral(`Agent Bridge - ${title}`)};`,
     `    var docHeight = ${numberLiteral(height)};`,
-    ...scene.elements.map((element, index) => drawElement(element, index)),
+    ...scene.elements.map((element, index) => drawElement(element, index, elementSemanticNote(scene, element))),
     "    app.redraw();",
     `    writeResult('{"ok":true,"jobId":${jsonLiteral(options.id)},"kind":"cartoon_scene","documentName":' + jsonString(doc.name) + ',"elementCount":${scene.elements.length},"app":"Adobe Illustrator","version":' + jsonString(app.version) + '}');`,
     "  } catch (e) {",
@@ -91,8 +115,52 @@ function generateExportJsx(command: ExportCommand, options: GenerateOptions): st
   ].join("\n");
 }
 
+function generatePlaceFileReferenceJsx(command: PlaceFileReferenceCommand, options: GenerateOptions): string {
+  const layerName = command.layerName ?? "Photoshop project reference";
+  const placedName = command.name ?? "photoshop-reference-pass";
+  const x = command.x ?? 0;
+  const y = command.y ?? 0;
+  const opacity = command.opacity ?? 35;
+  const locked = command.locked ?? true;
+  const embed = command.embed ?? false;
+
+  return [
+    "#target illustrator",
+    "(function () {",
+    runtimeFunctions(options),
+    "  try {",
+    "    if (app.documents.length === 0) {",
+    "      throw new Error('No active Illustrator document to place a Photoshop reference file into.');",
+    "    }",
+    "    var doc = app.activeDocument;",
+    `    var inputFile = new File(${jsonLiteral(command.inputPath)});`,
+    "    if (!inputFile.exists) {",
+      "      throw new Error('Photoshop reference file does not exist: ' + inputFile.fsName);",
+    "    }",
+    "    var layer = doc.layers.add();",
+    `    layer.name = ${jsonLiteral(layerName)};`,
+    `    var placementMode = placeReferenceFile(doc, layer, inputFile, ${jsonLiteral(placedName)}, ${numberLiteral(x)}, ${numberLiteral(
+      y
+    )}, ${command.width === undefined ? "null" : numberLiteral(command.width)}, ${
+      command.height === undefined ? "null" : numberLiteral(command.height)
+    }, ${numberLiteral(opacity)}, ${embed ? "true" : "false"});`,
+    locked ? "    layer.locked = true;" : "",
+    "    app.redraw();",
+    `    writeResult('{"ok":true,"jobId":${jsonLiteral(options.id)},"kind":${jsonLiteral(command.kind)},"inputPath":${jsonLiteral(command.inputPath)},"layerName":${jsonLiteral(layerName)},"placedName":${jsonLiteral(placedName)},"mode":' + jsonString(placementMode) + ',"embedded":${embed ? "true" : "false"},"locked":${locked ? "true" : "false"},"app":"Adobe Illustrator","version":' + jsonString(app.version) + '}');`,
+    "  } catch (e) {",
+    "    writeFailure(e);",
+    "    throw e;",
+    "  }",
+    "}());",
+    ""
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
 function runtimeFunctions(options: GenerateOptions): string {
   return [
+    `  var jobId = ${jsonLiteral(options.id)};`,
     `  var resultPath = ${jsonLiteral(options.resultPath)};`,
     "  function ensureParent(file) {",
     "    if (file.parent && !file.parent.exists) {",
@@ -144,28 +212,124 @@ function runtimeFunctions(options: GenerateOptions): string {
     "      item.strokeWidth = strokeWidth;",
     "    }",
     "    item.opacity = opacity;",
+    "  }",
+    "  function applyStrokeDetails(item, lineCap, lineJoin, dashArray, dashOffset, miterLimit) {",
+    "    if (!item.stroked) return;",
+    "    if (lineCap !== null) item.strokeCap = lineCap;",
+    "    if (lineJoin !== null) item.strokeJoin = lineJoin;",
+    "    if (dashArray !== null) item.strokeDashes = dashArray;",
+    "    if (dashOffset !== null) item.strokeDashOffset = dashOffset;",
+    "    if (miterLimit !== null) item.strokeMiterLimit = miterLimit;",
+    "  }",
+    "  function readTextFile(file) {",
+    "    file.encoding = 'UTF-8';",
+    "    file.open('r');",
+    "    var text = file.read();",
+    "    file.close();",
+    "    return text;",
+    "  }",
+    "  function isSvgFile(file) {",
+    "    return /\\.svg$/i.test(String(file.fsName));",
+    "  }",
+    "  function svgNumber(svgText, pattern, fallback) {",
+    "    var match = pattern.exec(svgText);",
+    "    if (!match) {",
+    "      return fallback;",
+    "    }",
+    "    var value = Number(match[1]);",
+    "    return isNaN(value) ? fallback : value;",
+    "  }",
+    "  function setTextStyle(textFrame, size, fill, opacity) {",
+    "    textFrame.textRange.characterAttributes.size = size;",
+    "    textFrame.textRange.characterAttributes.fillColor = rgb(fill);",
+    "    textFrame.opacity = opacity;",
+    "  }",
+    "  function placeReferenceFile(doc, layer, inputFile, placedName, x, y, width, height, opacity, embed) {",
+    "    if (isSvgFile(inputFile)) {",
+    "      return placeSvgReference(doc, layer, inputFile, placedName, x, y, width, height, opacity);",
+    "    }",
+    "    var placed = layer.placedItems.add();",
+    "    placed.file = inputFile;",
+    "    placed.name = placedName;",
+    "    placed.left = x;",
+    "    placed.top = doc.height - y;",
+    "    if (width !== null) {",
+    "      placed.width = width;",
+    "    }",
+    "    if (height !== null) {",
+    "      placed.height = height;",
+    "    }",
+    "    placed.opacity = opacity;",
+    "    if (embed) {",
+    "      try { placed.embed(); } catch (embedError) {}",
+    "    }",
+    "    return 'linked_file';",
+    "  }",
+    "  function placeSvgReference(doc, layer, inputFile, placedName, x, y, width, height, opacity) {",
+    "    var svgText = readTextFile(inputFile);",
+    "    var svgWidth = svgNumber(svgText, /<svg[^>]*\\bwidth=\"([0-9.]+)/i, width || doc.width);",
+    "    var svgHeight = svgNumber(svgText, /<svg[^>]*\\bheight=\"([0-9.]+)/i, height || doc.height);",
+    "    var targetWidth = width || svgWidth;",
+    "    var targetHeight = height || svgHeight;",
+    "    var scaleX = targetWidth / svgWidth;",
+    "    var scaleY = targetHeight / svgHeight;",
+    "    function sx(value) { return x + value * scaleX; }",
+    "    function sy(value) { return doc.height - (y + value * scaleY); }",
+    "    function rect(name, rx, ry, rw, rh, fill, stroke, strokeWidth, itemOpacity) {",
+    "      var item = layer.pathItems.rectangle(sy(ry), sx(rx), rw * scaleX, rh * scaleY);",
+    "      item.name = name;",
+    "      applyPathStyle(item, fill, stroke, strokeWidth, itemOpacity);",
+    "      return item;",
+    "    }",
+    "    rect(placedName + ' frame', 0, 0, svgWidth, svgHeight, null, '#0F766E', 4, opacity);",
+    "    rect(placedName + ' note panel', 32, 32, Math.max(120, svgWidth - 64), 112, '#ECFDF5', '#0F766E', 2, Math.min(100, opacity + 15));",
+    "    var title = /<text[^>]*>([^<]*)<\\/text>/i.exec(svgText);",
+    "    var titleText = title ? title[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>') : 'Photoshop SVG handoff';",
+    "    var textFrame = layer.textFrames.add();",
+    "    textFrame.name = placedName + ' title';",
+    "    textFrame.contents = titleText;",
+    "    textFrame.left = sx(56);",
+    "    textFrame.top = sy(72);",
+    "    setTextStyle(textFrame, Math.max(10, 26 * Math.min(scaleX, scaleY)), '#134E4A', Math.min(100, opacity + 25));",
+    "    var trace = /id=\"photoshop-visible-mouse-stroke\"[^>]*d=\"M\\s*([0-9.]+)\\s+([0-9.]+)\\s+Q\\s+([0-9.]+)\\s+([0-9.]+)\\s+([0-9.]+)\\s+([0-9.]+)/i.exec(svgText);",
+    "    var startX = trace ? Number(trace[1]) : svgWidth * 0.34;",
+    "    var startY = trace ? Number(trace[2]) : svgHeight * 0.54;",
+    "    var controlX = trace ? Number(trace[3]) : svgWidth * 0.5;",
+    "    var controlY = trace ? Number(trace[4]) : svgHeight * 0.47;",
+    "    var endX = trace ? Number(trace[5]) : svgWidth * 0.66;",
+    "    var endY = trace ? Number(trace[6]) : svgHeight * 0.58;",
+    "    var stroke = layer.pathItems.add();",
+    "    stroke.name = placedName + ' visible mouse stroke';",
+    "    stroke.setEntirePath([[sx(startX), sy(startY)], [sx(controlX), sy(controlY)], [sx(endX), sy(endY)]]);",
+    "    applyPathStyle(stroke, null, '#14B8A6', 10, Math.min(100, opacity + 35));",
+    "    rect(placedName + ' start marker', startX - 18, startY - 18, 36, 36, '#CCFBF1', '#0F766E', 3, Math.min(100, opacity + 35));",
+    "    rect(placedName + ' end marker', endX - 18, endY - 18, 36, 36, '#CCFBF1', '#0F766E', 3, Math.min(100, opacity + 35));",
+    "    return 'svg_rebuilt_reference';",
     "  }"
   ].join("\n");
 }
 
-function drawElement(element: SceneElement, index: number): string {
-  const name = element.name ?? `${element.type}_${index + 1}`;
+function drawElement(element: SceneElement, index: number, semanticNote: string | undefined): string {
+  const name = element.name ?? element.id ?? `${element.type}_${index + 1}`;
   const style = withStyleDefaults(element.style);
+  const noteLine = semanticNote ? `    item${index}.note = ${jsonLiteral(semanticNote)};` : "";
 
   if (element.type === "rect") {
     return [
       `    var item${index} = layer.pathItems.rectangle(docHeight - ${numberLiteral(element.y)}, ${numberLiteral(element.x)}, ${numberLiteral(element.width)}, ${numberLiteral(element.height)});`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       styleLine(index, style)
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (element.type === "ellipse") {
     return [
       `    var item${index} = layer.pathItems.ellipse(docHeight - ${numberLiteral(element.y)}, ${numberLiteral(element.x)}, ${numberLiteral(element.width)}, ${numberLiteral(element.height)});`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       styleLine(index, style)
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (element.type === "line") {
@@ -173,9 +337,11 @@ function drawElement(element: SceneElement, index: number): string {
     return [
       `    var item${index} = layer.pathItems.add();`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       `    item${index}.setEntirePath([[${numberLiteral(element.x)}, docHeight - ${numberLiteral(element.y)}], [${numberLiteral(element.x2)}, docHeight - ${numberLiteral(element.y2)}]]);`,
-      `    applyPathStyle(item${index}, null, ${jsonLiteral(stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`
-    ].join("\n");
+      `    applyPathStyle(item${index}, null, ${jsonLiteral(stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`,
+      strokeDetailsLine(index, style)
+    ].filter(Boolean).join("\n");
   }
 
   if (element.type === "polygon") {
@@ -185,6 +351,7 @@ function drawElement(element: SceneElement, index: number): string {
     return [
       `    var item${index} = layer.pathItems.add();`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       `    item${index}.setEntirePath([${points}]);`,
       `    item${index}.closed = true;`,
       styleLine(index, style)
@@ -198,6 +365,7 @@ function drawElement(element: SceneElement, index: number): string {
     return [
       `    var item${index} = layer.pathItems.add();`,
       `    item${index}.name = ${jsonLiteral(name)};`,
+      noteLine,
       `    item${index}.setEntirePath([${points}]);`,
       `    item${index}.closed = ${element.closed === false ? "false" : "true"};`,
       ...element.points.map((point, pointIndex) => pathPointLines(index, pointIndex, point)),
@@ -207,10 +375,15 @@ function drawElement(element: SceneElement, index: number): string {
       .join("\n");
   }
 
+  if (element.type === "compound_path") {
+    throw new Error("Illustrator JSX adapter does not yet support compound_path; render this scene through the software-native SVG or PNG path");
+  }
+
   const fill = style.fill ?? "#111111";
   return [
     `    var item${index} = layer.textFrames.add();`,
     `    item${index}.name = ${jsonLiteral(name)};`,
+    noteLine,
     `    item${index}.contents = ${jsonLiteral(element.text)};`,
     `    item${index}.left = ${numberLiteral(element.x)};`,
     `    item${index}.top = docHeight - ${numberLiteral(element.y)};`,
@@ -221,6 +394,26 @@ function drawElement(element: SceneElement, index: number): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function elementSemanticNote(scene: CartoonScene, element: SceneElement): string | undefined {
+  if (!element.id) {
+    return undefined;
+  }
+
+  const objects = (scene.semantics?.objects ?? [])
+    .filter((object) => object.elementIds.includes(element.id!))
+    .map((object) => ({ id: object.id, kind: object.kind }));
+  const relationships = (scene.semantics?.relationships ?? [])
+    .filter((relationship) => relationship.visualElementIds?.includes(element.id!))
+    .map((relationship) => ({ id: relationship.id, predicate: relationship.predicate }));
+
+  return JSON.stringify({
+    schema: "scientific-image-generator.element-semantics.v1",
+    elementId: element.id,
+    objects,
+    relationships
+  });
 }
 
 function pathPointLines(itemIndex: number, pointIndex: number, point: PathPoint): string {
@@ -281,17 +474,35 @@ function exportStatement(command: ExportCommand): string {
   ].join("\n");
 }
 
-function withStyleDefaults(style: ElementStyle | undefined): Required<ElementStyle> {
+type ResolvedElementStyle = Required<Pick<ElementStyle, "fill" | "stroke" | "strokeWidth" | "opacity">> &
+  Pick<ElementStyle, "lineCap" | "lineJoin" | "dashArray" | "dashOffset" | "miterLimit">;
+
+function withStyleDefaults(style: ElementStyle | undefined): ResolvedElementStyle {
   return {
     fill: style?.fill === undefined ? "#FFFFFF" : style.fill,
     stroke: style?.stroke === undefined ? "#111111" : style.stroke,
     strokeWidth: style?.strokeWidth ?? 2,
-    opacity: style?.opacity ?? 100
+    opacity: style?.opacity ?? 100,
+    lineCap: style?.lineCap,
+    lineJoin: style?.lineJoin,
+    dashArray: style?.dashArray,
+    dashOffset: style?.dashOffset,
+    miterLimit: style?.miterLimit
   };
 }
 
-function styleLine(index: number, style: Required<ElementStyle>): string {
-  return `    applyPathStyle(item${index}, ${nullableString(style.fill)}, ${nullableString(style.stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`;
+function styleLine(index: number, style: ResolvedElementStyle): string {
+  return [
+    `    applyPathStyle(item${index}, ${nullableString(style.fill)}, ${nullableString(style.stroke)}, ${numberLiteral(style.strokeWidth)}, ${numberLiteral(style.opacity)});`,
+    strokeDetailsLine(index, style)
+  ].join("\n");
+}
+
+function strokeDetailsLine(index: number, style: ResolvedElementStyle): string {
+  const cap = style.lineCap === undefined ? "null" : `StrokeCap.${style.lineCap === "round" ? "ROUNDENDCAP" : style.lineCap === "square" ? "PROJECTINGENDCAP" : "BUTTENDCAP"}`;
+  const join = style.lineJoin === undefined ? "null" : `StrokeJoin.${style.lineJoin === "round" ? "ROUNDENDJOIN" : style.lineJoin === "bevel" ? "BEVELENDJOIN" : "MITERENDJOIN"}`;
+  const dashes = style.dashArray === undefined ? "null" : `[${style.dashArray.map(numberLiteral).join(", ")}]`;
+  return `    applyStrokeDetails(item${index}, ${cap}, ${join}, ${dashes}, ${style.dashOffset === undefined ? "null" : numberLiteral(style.dashOffset)}, ${style.miterLimit === undefined ? "null" : numberLiteral(style.miterLimit)});`;
 }
 
 function nullableString(value: string | null): string {

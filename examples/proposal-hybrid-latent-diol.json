@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "ProposalHybridHeroPlan.v1",
+  "profile": "proposal",
+  "widthMm": 171.5,
+  "seed": 260831,
+  "title": "From latent sites to a tested reaction–transport map",
+  "subtitle": "Activate a buried profile, measure the interphase, and transfer only after frozen-holdout agreement.",
+  "mechanism": {"mode": "activation", "kicker": "01  ACTIVATE", "title": "Latent diol sites", "caption": ["Protected sites", "hydrolysis follows", "penetrant transport", "into buried layers"], "siteLabel": "latent diol site"},
+  "material": {"mode": "activation_profile", "kicker": "02  FORM A FINITE INTERPHASE", "upperLabel": "activated surface", "lowerLabel": "protected bulk", "variantLabels": ["SURFACE", "INTERPHASE", "BULK"]},
+  "response": {"kicker": "03  MAP THE PROFILE", "title": "Measure the interphase", "axisX": "depth", "axisY": "diol %", "items": ["penetrant transport", "activation depth", "boundary state"]},
+  "decision": {"kicker": "04  FREEZE + TEST", "title": "Can the map predict?", "question": "MATCH?", "dataLabel": "HELD-OUT", "modelLabel": "FROZEN MAP", "noLabel": "NO: LIMIT DOMAIN", "yesLabel": "YES", "outputLabel": "TRANSFER MAP"},
+  "controls": ["Protected polymer control", "Matched activation history", "Surface state set before activation", "Bulk conversion is not a profile"],
+  "footer": "Prospective schematic — no synthetic profiles; transfer requires frozen-holdout agreement.",
+  "caption": "Latent sites in an ethylene-derived polymer are activated only where reaction and penetrant transport permit. Spatial measurements define a finite interphase, and a frozen reaction–transport map advances only if it predicts held-out conditions.",
+  "altText": "Four-stage proposal schematic. Latent diol activation creates a finite polymer interphase, spatial response is measured, and a frozen reaction–transport map is accepted only after agreement with held-out conditions.",
+  "sourceRefs": ["ProposalWriter/proposals/2026-nsf-interfacial-engineering-ethylene-solketal-acrylate-copolymers/PROJECT.md", "ProposalWriter/proposals/2026-nsf-interfacial-engineering-ethylene-solketal-acrylate-copolymers/working/Interfacial_Project_Description_Integrated_Draft_v16.md"],
+  "palette": {"teal": "#176C73", "deep": "#243B4A", "orange": "#A94F22", "muted": "#566D79", "paper": "#F8FAF9", "line": "#B7CCCE"}
+}

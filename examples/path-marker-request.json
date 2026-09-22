@@ -1,0 +1,21 @@
+{
+  "source": {
+    "id": "signal-path",
+    "type": "path",
+    "name": "Curved signaling path",
+    "x": 0,
+    "y": 0,
+    "closed": false,
+    "points": [
+      { "x": 80, "y": 180, "rightX": 130, "rightY": 100 },
+      { "x": 250, "y": 100, "leftX": 190, "leftY": 100, "rightX": 310, "rightY": 100 },
+      { "x": 420, "y": 180, "leftX": 370, "leftY": 100 }
+    ],
+    "style": { "fill": null, "stroke": "#0F766E", "strokeWidth": 4 }
+  },
+  "markers": [
+    { "at": "start", "kind": "circle", "size": 18, "idPrefix": "signal.start", "style": { "fill": "#FFFFFF", "stroke": "#0F766E", "strokeWidth": 4 } },
+    { "at": "mid", "kind": "diamond", "size": 20, "idPrefix": "signal.checkpoint", "style": { "fill": "#FDE68A", "stroke": "#92400E", "strokeWidth": 2 } },
+    { "at": "end", "kind": "arrowhead", "size": 22, "idPrefix": "signal.end" }
+  ]
+}

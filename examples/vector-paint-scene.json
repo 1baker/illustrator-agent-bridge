@@ -1,0 +1,50 @@
+{
+  "document": {
+    "title": "Software-native concentration field",
+    "width": 640,
+    "height": 360,
+    "colorMode": "RGB"
+  },
+  "paints": [
+    {
+      "id": "concentration",
+      "name": "Low-to-high concentration",
+      "type": "linear_gradient",
+      "units": "object_bounding_box",
+      "x1": 0,
+      "y1": 0,
+      "x2": 1,
+      "y2": 0,
+      "stops": [
+        { "offset": 0, "color": "#EFF6FF" },
+        { "offset": 50, "color": "#60A5FA" },
+        { "offset": 100, "color": "#1E3A8A" }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "id": "field",
+      "type": "rect",
+      "name": "concentration field",
+      "x": 80,
+      "y": 80,
+      "width": 480,
+      "height": 160,
+      "style": { "fillPaint": "concentration", "stroke": "#1E3A8A", "strokeWidth": 3 }
+    },
+    { "id": "low", "type": "text", "x": 80, "y": 270, "text": "low", "size": 18, "style": { "fill": "#475569", "stroke": null } },
+    { "id": "high", "type": "text", "x": 520, "y": 270, "text": "high", "size": 18, "style": { "fill": "#1E3A8A", "stroke": null } }
+  ],
+  "semantics": {
+    "objects": [
+      {
+        "id": "concentration-field",
+        "kind": "quantitative_field",
+        "label": "concentration increases from left to right",
+        "elementIds": ["field", "low", "high"],
+        "properties": { "paintId": "concentration", "mapping": "left_low_right_high" }
+      }
+    ]
+  }
+}

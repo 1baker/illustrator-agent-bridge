@@ -27,14 +27,22 @@ export async function createGeneratedJob(command: BridgeCommand, root?: string, 
 }
 
 function toHostCommand(command: BridgeCommand, hostPlatform?: IllustratorHostPlatform): BridgeCommand {
-  if (command.kind !== "export") {
-    return command;
+  if (command.kind === "place_image_reference" || command.kind === "place_file_reference") {
+    const absoluteInputPath = isAbsolute(command.inputPath) ? command.inputPath : resolve(process.cwd(), command.inputPath);
+    return {
+      ...command,
+      inputPath: toIllustratorPath(absoluteInputPath, hostPlatform)
+    };
   }
 
-  const absoluteOutputPath = isAbsolute(command.outputPath) ? command.outputPath : resolve(process.cwd(), command.outputPath);
+  if (command.kind === "export") {
+    const absoluteOutputPath = isAbsolute(command.outputPath) ? command.outputPath : resolve(process.cwd(), command.outputPath);
 
-  return {
-    ...command,
-    outputPath: toIllustratorPath(absoluteOutputPath, hostPlatform)
-  };
+    return {
+      ...command,
+      outputPath: toIllustratorPath(absoluteOutputPath, hostPlatform)
+    };
+  }
+
+  return command;
 }
