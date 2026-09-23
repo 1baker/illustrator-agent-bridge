@@ -3,6 +3,8 @@ dist/
 .env
 .DS_Store
 .codex/wake/
+__pycache__/
+*.pyc
 auracall-browser-tools-*.json
 var/*
 !var/.gitkeep
