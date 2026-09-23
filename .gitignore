@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .DS_Store
+.codex/wake/
 auracall-browser-tools-*.json
 var/*
 !var/.gitkeep
